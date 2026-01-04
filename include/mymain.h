@@ -19,7 +19,6 @@ extern "C" {
 /*
  *  Primary entry points from main.c
  */
-void main_pre_loop();
 void main_loop();
 
 extern I2C_HandleTypeDef hi2c1;

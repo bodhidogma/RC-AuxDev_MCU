@@ -33,14 +33,7 @@ DevWS2812 ws2812(&htim2, TIM_CHANNEL_3);
 
 static uint32_t sys_now_ms = 0;
 
-bool usb_connected = false;
-
-/**
- *
- */
-void main_pre_loop(void){
-
-};
+bool usb_connected = true;
 
 /**
  *
@@ -48,13 +41,15 @@ void main_pre_loop(void){
 void main_loop(void) {
   uint32_t last_now_ms_ = 0;
 
+  //HAL_Delay(2000);
+
   uint8_t buf[32];
   uint8_t buffer[] = "<<START>>\r\n";
-  CDC_Transmit_FS(buffer, sizeof(buffer));
-  HAL_Delay(100);
 
+  //CDC_Transmit_FS(buffer, sizeof(buffer));
+  //HAL_Delay(100);
   HAL_UART_Transmit_IT(&huart1, buffer, sizeof(buffer));
-  HAL_Delay(100);
+  //HAL_Delay(100);
 
   // disable stdio buffering
   setbuf(stdout, NULL);
@@ -102,9 +97,9 @@ void main_loop(void) {
     if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
       usb_connected = true;
       // console.Send("USB CDC Connected!" NL, 20);
-      // HAL_Delay(100);
-      CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
-      HAL_Delay(100);
+      //HAL_Delay(1000);
+      //CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
+      //HAL_Delay(100);
     }
   }
 }
