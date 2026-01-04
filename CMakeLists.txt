@@ -74,3 +74,26 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+
+# Custom target to flash the binary to the device via SWD
+add_custom_target(flash
+    COMMAND STM32_Programmer_CLI
+        --connect port=swd
+        --download $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+        -hardRst
+    DEPENDS ${CMAKE_PROJECT_NAME}
+    COMMENT "Flashing ${CMAKE_PROJECT_NAME} to STM32 device via SWD"
+    VERBATIM
+)
+
+# Optional: Custom target to flash with specific serial number
+# Usage: cmake --build build --target flash_sn -DSN=<your_serial_number>
+add_custom_target(flash_sn
+    COMMAND STM32_Programmer_CLI
+        --connect port=swd sn=${SN}
+        --download $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+        -hardRst
+    DEPENDS ${CMAKE_PROJECT_NAME}
+    COMMENT "Flashing ${CMAKE_PROJECT_NAME} to STM32 device via SWD with serial number ${SN}"
+    VERBATIM
+)

@@ -1,6 +1,6 @@
 {
-	"version": "2.0.0",
-	"tasks": [
+  "version": "2.0.0",
+  "tasks": [
     {
       "type": "cppbuild",
       "label": "Build project",
@@ -25,7 +25,7 @@
     },
     {
       "type": "shell",
-      "label": "Re-build project",
+      "label": "Build-clean project",
       "command": "cmake",
       "args": [
         "--build",
@@ -59,7 +59,7 @@
     },
     {
       "type": "shell",
-      "label": "CubeProg: Flash project (SWD)",
+      "label": "Build and Flash",
       "command": "STM32_Programmer_CLI",
       "args": [
         "--connect",
@@ -75,7 +75,7 @@
     },
     {
       "type": "shell",
-      "label": "CubeProg: Flash project with defined serial number (SWD) - you must set serial number first",
+      "label": "CubeProg: Flash project with defined serial number (SWD)",
       "command": "STM32_Programmer_CLI",
       "args": [
         "--connect",
@@ -101,6 +101,6 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
-    }
+    },
   ]
 }
