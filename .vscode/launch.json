@@ -1,0 +1,55 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Debug (OpenOCD)",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/rcauxdev_mcu.elf",
+            "device": "STM32F303xB-xC", // e.g., STM32F103C8T6
+            //"interface": "swd",
+            "configFiles": [
+                "interface/stlink.cfg", // Or the config file for your specific probe
+                "target/stm32f3x.cfg" // Or the config file for your specific STM32 series
+            ],
+            //"openOCDPath": "/path/to/openocd", // Optional, if not in PATH
+            //"svdFile": "${workspaceFolder}/STM32F407.svd", // Optional, for peripheral views
+            "runToEntryPoint": "main",
+            //"showDevDebugOutput": "parsed", // parsed, vscode
+            //"showDevDebugOutput": "vscode",
+            "servertype": "openocd",
+            //"servertype": "stlink"
+            //"swoConfig": {}
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 5 // Optional: sets the refresh rate (e.g., 4 Hz)
+            }
+        },
+        {
+            "type": "cortex-debug",
+            "request": "launch",
+            "name": "Flash BIN",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceFolder}/build/Debug/rcauxdev_mcu.elf",
+            //"device": "STM32F103C8T6", // e.g., STM32F407VGTX
+            "configFiles": [
+                "interface/stlink.cfg", // Or the config file for your specific probe
+                //"target/stm32f3x.cfg" // Or the config file for your specific STM32 series
+            ],
+            //"openOCDPath": "/path/to/openocd", // Optional, if not in PATH
+            //"svdFile": "${workspaceFolder}/STM32F407.svd", // Optional, for peripheral views
+            //"runToEntryPoint": "main",
+            //"runToMain": false,
+            //"showDevDebugOutput": "parsed",
+            "servertype": "openocd",
+            //"servertype": "stlink"
+            "postLaunchCommands": [
+                //"program ${workspaceFolder}/build/Debug/F1_test2.elf",
+                //"monitor reset halt",
+                //"interrupt continue",
+                "quit"
+            ]
+        }
+    ]
+}
