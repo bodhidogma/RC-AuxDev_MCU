@@ -28,7 +28,7 @@ DevLED led1(LED1_GPIO_Port, LED1_Pin);
 // DevADC adc0(&hadc1);
 // RC receiver PWM duty cycle reader (timer4 CH1+CH2)
 DevPWMDuty pwm_duty(&htim4);
-DevWS2812 ws2812(&htim2, TIM_CHANNEL_3);
+DevWS2812 ws2812(&hspi1);
 
 
 static uint32_t sys_now_ms = 0;
@@ -58,16 +58,16 @@ void main_loop(void) {
   console.Initialize();
   // adc0.Initialize();
   //pwm_duty.Initialize();
-  //ws2812.Initialize();
+  ws2812.Initialize();
 
   led0.SetPattern(DevLED::BLINK1);
   led1.SetPattern(DevLED::BLINK3);
 
+  //ws2812.Loop();
+
   // HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED0_Pin, GPIO_PIN_RESET);	// RESET
   // HAL_GPIO_WritePin(LED0_GPIO_Port, LED0_Pin, GPIO_PIN_SET);
   // HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
-
-  //ws2812.Loop();
 
   while (1) {
     sys_now_ms = millis();
@@ -93,6 +93,8 @@ void main_loop(void) {
     console.Update();
     led0.Update();
     led1.Update();
+  
+    ws2812.Update();
 
     if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
       usb_connected = true;

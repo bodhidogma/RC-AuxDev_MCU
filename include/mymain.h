@@ -33,6 +33,10 @@ extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 
+extern SPI_HandleTypeDef hspi1;
+extern SPI_HandleTypeDef hspi2;
+extern DMA_HandleTypeDef hdma_spi1_tx;
+
 
 #ifdef __cplusplus
 }

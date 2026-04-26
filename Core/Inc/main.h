@@ -61,8 +61,16 @@ void Error_Handler(void);
 #define LED0_GPIO_Port GPIOC
 #define LED1_Pin GPIO_PIN_3
 #define LED1_GPIO_Port GPIOA
+#define WS2812_CH1_Pin GPIO_PIN_7
+#define WS2812_CH1_GPIO_Port GPIOA
+#define _WS2812_CH1_Pin GPIO_PIN_0
+#define _WS2812_CH1_GPIO_Port GPIOB
+#define _WS2812_CH2_Pin GPIO_PIN_1
+#define _WS2812_CH2_GPIO_Port GPIOB
 #define BOOT0_Pin GPIO_PIN_2
 #define BOOT0_GPIO_Port GPIOB
+#define WS2812_CH2_Pin GPIO_PIN_15
+#define WS2812_CH2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

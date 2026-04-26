@@ -37,6 +37,8 @@ bool DevPWMDuty::GetConfig(void) {
  * Combined channels = PWM In on CH1 (CH1 rising, CH2 falling)
  * Prescaler = 71 (72Mhz / (71 + 1) = 1Mhz), So timer ticks every 1us
  * RC transmitter signal = 50Hz, 20ms period, 1-2ms pulse width
+ * 
+ * tim4 = PB6 input
  */
 
 extern "C" void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
