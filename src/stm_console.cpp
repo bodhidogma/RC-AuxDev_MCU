@@ -9,6 +9,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 #include <cstring>
 
 #include "mymain.h"
+#include "dev_sbus.hpp"
 
 // external objects
 
@@ -16,6 +17,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 extern DevLED led0;
 extern DevLED led1;
+extern DevSBus sbus;
 
 // global uart rx buffer
 static uint8_t uart1_rx_buffer_[1];
@@ -264,6 +266,11 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     HAL_UART_Receive_IT(huart, uart1_rx_buffer_, sizeof(uart1_rx_buffer_));
     // HAL_UART_Receive_IT(huart, &uart_buffer_, 1);
     // HAL_UART_Receive_DMA(huart, &uart_buffer_, 1);
+  } else if (huart->Instance == USART2) {
+    // SBUS: HandleRx re-arms IT internally
+#if USE_SBUS
+    sbus.HandleRx(sbus.rx_byte_);
+#endif
   }
 }
 

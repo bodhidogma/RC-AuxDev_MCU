@@ -50,6 +50,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stm_console.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_led.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_duty.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_sbus.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_cppm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_ws2812.cpp
 )
 

@@ -99,6 +99,8 @@ bool DevPWMDuty::IsFresh(int idx) const {
 }
 
 /** HAL input capture callback — dispatches to the capture manager. */
+#if USE_PWM_DUTY
 extern "C" void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
   pwm_duty.HandleCapture(htim);
 }
+#endif

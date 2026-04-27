@@ -1,0 +1,124 @@
+/* SBUS RC receiver input driver.
+ *
+ * USART2 config (set by CubeMX): 100000 baud, 8E2, RX-only, RX pin inverted.
+ * Protocol: 25-byte frame @ ~7 ms interval.
+ *   byte[ 0]    = 0x0F  (header)
+ *   bytes[1-22] = 22 bytes carrying 16 × 11-bit channel values (LSB first)
+ *   byte[23]    = flags (ch17, ch18, frame-lost, failsafe)
+ *   byte[24]    = 0x00  (footer)
+ *
+ * Frame sync strategy: inter-frame gap > SBUS_GAP_RESET_MS (4 ms) resets
+ * the accumulator, so the next 0x0F byte starts a fresh frame.
+ *
+ * Single-byte interrupt-driven receive (matches stm_console pattern).
+ * HandleRx() is called from HAL_UART_RxCpltCallback in stm_console.cpp.
+ */
+
+#include "dev_sbus.hpp"
+#include <string.h>
+
+// Forward declaration — global instance defined in mymain.cpp
+extern DevSBus sbus;
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+bool DevSBus::Initialize(UART_HandleTypeDef *huart) {
+  my_huart_      = huart;
+  rx_index_      = 0;
+  valid_         = false;
+  last_rx_ms_    = 0;
+  last_update_ms_= 0;
+  flags_         = 0;
+  memset(channels_, 0, sizeof(channels_));
+  memset(rx_buffer_, 0, sizeof(rx_buffer_));
+
+  // Arm single-byte interrupt receive
+
+  
+  HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
+  return true;
+}
+
+void DevSBus::HandleRx(uint8_t byte) {
+  uint32_t now = HAL_GetTick();
+
+  // Gap-based frame sync: if we've been idle longer than one inter-frame gap,
+  // reset and expect a fresh header on the next byte.
+  if ((now - last_rx_ms_) > SBUS_GAP_RESET_MS) {
+    rx_index_ = 0;
+  }
+  last_rx_ms_ = now;
+
+  // At index 0 we only accept the SBUS header byte
+  if (rx_index_ == 0 && byte != 0x0F) {
+    return;  // Not a header — wait for next gap
+  }
+
+  rx_buffer_[rx_index_++] = byte;
+
+  if (rx_index_ == SBUS_FRAME_LEN) {
+    rx_index_ = 0;
+    // Validate header + footer
+    if (rx_buffer_[0] == 0x0F && rx_buffer_[24] == 0x00) {
+      DecodeFrame();
+      valid_          = true;
+      last_update_ms_ = now;
+    }
+  }
+
+  // Re-arm for next byte
+  HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
+}
+
+bool DevSBus::GetChannels(uint16_t *channels, int &channel_count) const {
+  if (!valid_) return false;
+  memcpy(channels, channels_, sizeof(uint16_t) * SBUS_CHANNELS);
+  channel_count = SBUS_CHANNELS;
+  return true;
+}
+
+bool DevSBus::IsFresh(void) const {
+  if (!valid_) return false;
+  return (HAL_GetTick() - last_update_ms_) < SBUS_STALE_MS;
+}
+
+uint8_t DevSBus::GetFlags(void) const {
+  return flags_;
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+/* Unpack 16 × 11-bit channels from rx_buffer_[1..22].
+ * Standard SBUS bit layout, LSB of each channel first, little-endian across
+ * bytes, continuous stream of bits (no padding between channels).
+ */
+void DevSBus::DecodeFrame(void) {
+  const uint8_t *d = &rx_buffer_[1];
+
+  channels_[ 0] = ((uint16_t)d[ 0]        | ((uint16_t)d[ 1] << 8))  & 0x07FF;
+  channels_[ 1] = ((uint16_t)d[ 1] >> 3   | ((uint16_t)d[ 2] << 5))  & 0x07FF;
+  channels_[ 2] = ((uint16_t)d[ 2] >> 6   | ((uint16_t)d[ 3] << 2)
+                 | ((uint16_t)d[ 4] << 10)) & 0x07FF;
+  channels_[ 3] = ((uint16_t)d[ 4] >> 1   | ((uint16_t)d[ 5] << 7))  & 0x07FF;
+  channels_[ 4] = ((uint16_t)d[ 5] >> 4   | ((uint16_t)d[ 6] << 4))  & 0x07FF;
+  channels_[ 5] = ((uint16_t)d[ 6] >> 7   | ((uint16_t)d[ 7] << 1)
+                 | ((uint16_t)d[ 8] << 9))  & 0x07FF;
+  channels_[ 6] = ((uint16_t)d[ 8] >> 2   | ((uint16_t)d[ 9] << 6))  & 0x07FF;
+  channels_[ 7] = ((uint16_t)d[ 9] >> 5   | ((uint16_t)d[10] << 3))  & 0x07FF;
+  channels_[ 8] = ((uint16_t)d[11]        | ((uint16_t)d[12] << 8))  & 0x07FF;
+  channels_[ 9] = ((uint16_t)d[12] >> 3   | ((uint16_t)d[13] << 5))  & 0x07FF;
+  channels_[10] = ((uint16_t)d[13] >> 6   | ((uint16_t)d[14] << 2)
+                 | ((uint16_t)d[15] << 10)) & 0x07FF;
+  channels_[11] = ((uint16_t)d[15] >> 1   | ((uint16_t)d[16] << 7))  & 0x07FF;
+  channels_[12] = ((uint16_t)d[16] >> 4   | ((uint16_t)d[17] << 4))  & 0x07FF;
+  channels_[13] = ((uint16_t)d[17] >> 7   | ((uint16_t)d[18] << 1)
+                 | ((uint16_t)d[19] << 9))  & 0x07FF;
+  channels_[14] = ((uint16_t)d[19] >> 2   | ((uint16_t)d[20] << 6))  & 0x07FF;
+  channels_[15] = ((uint16_t)d[20] >> 5   | ((uint16_t)d[21] << 3))  & 0x07FF;
+
+  flags_ = rx_buffer_[23];
+}
