@@ -5,22 +5,7 @@
 
 #include "dev_ws2812.hpp"
 
-// static reference to global object
-extern DevWS2812 ws2812;
-
-#define MAX_LED 8
 #define USE_BRIGHTNESS 1
-#define WS2812_LEAD_IN_BYTES 3   // SPI stabilization lead-in
-#define WS2812_RESET_BYTES 50     // >50µs reset period at 2.25 MHz
-#define SPI_BUFFER_SIZE (9 * MAX_LED + WS2812_LEAD_IN_BYTES + WS2812_RESET_BYTES)
-
-uint8_t LED_Data[MAX_LED][4];
-uint8_t LED_Mod[MAX_LED][4];  // for brightness
-uint8_t spiData[SPI_BUFFER_SIZE];
-volatile int datasentflag = 0;
-
-// Track current brightness level (0-255)
-static uint8_t current_brightness = 64;
 
 // Lookup table: converts one WS2812 byte to 3 SPI bytes
 // Each WS2812 bit encoded as 3 SPI bits: '1'=110, '0'=100
@@ -112,8 +97,51 @@ const uint8_t gammaTable[] = {
     215, 218, 220, 223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252,
     255};
 
+DevWS2812 *DevWS2812::instances_[DevWS2812::kMaxInstances] = {nullptr};
+
+DevWS2812::DevWS2812(SPI_HandleTypeDef *hspi)
+    : my_spi_(hspi), current_brightness_(64), dma_busy_(0), pat_step_(0), last_now_ms_(0) {
+  for (int i = 0; i < kMaxLed; i++) {
+    led_data_[i][0] = 0;
+    led_data_[i][1] = 0;
+    led_data_[i][2] = 0;
+    led_data_[i][3] = 0;
+    led_mod_[i][0] = 0;
+    led_mod_[i][1] = 0;
+    led_mod_[i][2] = 0;
+    led_mod_[i][3] = 0;
+  }
+  for (int i = 0; i < kSpiBufferSize; i++) {
+    spi_data_[i] = 0;
+  }
+  RegisterInstance(this);
+}
+
+void DevWS2812::RegisterInstance(DevWS2812 *inst) {
+  for (int i = 0; i < kMaxInstances; i++) {
+    if (instances_[i] == inst) return;
+    if (instances_[i] == nullptr) {
+      instances_[i] = inst;
+      return;
+    }
+  }
+}
+
+DevWS2812 *DevWS2812::FindBySpiHandle(SPI_HandleTypeDef *hspi) {
+  if (hspi == nullptr) return nullptr;
+
+  for (int i = 0; i < kMaxInstances; i++) {
+    DevWS2812 *inst = instances_[i];
+    if (inst == nullptr || inst->my_spi_ == nullptr) continue;
+    if (inst->my_spi_ == hspi) return inst;
+    if (inst->my_spi_->Instance == hspi->Instance) return inst;
+  }
+
+  return nullptr;
+}
+
 // Apply gamma-corrected brightness to a single LED color value
-static uint8_t apply_brightness_to_value(uint8_t value, uint8_t brightness) {
+uint8_t DevWS2812::ApplyBrightnessToValue(uint8_t value, uint8_t brightness) {
 #if USE_BRIGHTNESS
   // Scale value by brightness, then apply gamma correction
   uint16_t scaled = ((uint16_t)value * brightness) / 255;
@@ -123,96 +151,96 @@ static uint8_t apply_brightness_to_value(uint8_t value, uint8_t brightness) {
 #endif
 }
 
-void Set_LED(int LEDnum, int Red, int Green, int Blue) {
-  if (LEDnum >= MAX_LED) return;  // Bounds check
-  
+void DevWS2812::SetLED(int led_num, int red, int green, int blue) {
+  if (led_num < 0 || led_num >= kMaxLed) return;
+
   // Update LED_Data
-  LED_Data[LEDnum][0] = LEDnum;
-  LED_Data[LEDnum][1] = Green;
-  LED_Data[LEDnum][2] = Red;
-  LED_Data[LEDnum][3] = Blue;
-  
+  led_data_[led_num][0] = static_cast<uint8_t>(led_num);
+  led_data_[led_num][1] = static_cast<uint8_t>(green);
+  led_data_[led_num][2] = static_cast<uint8_t>(red);
+  led_data_[led_num][3] = static_cast<uint8_t>(blue);
+
   // Auto-update LED_Mod with current brightness applied
-  LED_Mod[LEDnum][0] = LEDnum;
-  LED_Mod[LEDnum][1] = apply_brightness_to_value(Green, current_brightness);
-  LED_Mod[LEDnum][2] = apply_brightness_to_value(Red, current_brightness);
-  LED_Mod[LEDnum][3] = apply_brightness_to_value(Blue, current_brightness);
+  led_mod_[led_num][0] = static_cast<uint8_t>(led_num);
+  led_mod_[led_num][1] = ApplyBrightnessToValue(static_cast<uint8_t>(green), current_brightness_);
+  led_mod_[led_num][2] = ApplyBrightnessToValue(static_cast<uint8_t>(red), current_brightness_);
+  led_mod_[led_num][3] = ApplyBrightnessToValue(static_cast<uint8_t>(blue), current_brightness_);
 }
 
-void Set_Brightness(int brightness)  // 0-255
-{
+void DevWS2812::SetBrightness(int brightness) {
   if (brightness > 255) brightness = 255;
   if (brightness < 0) brightness = 0;
-  current_brightness = (uint8_t)brightness;
-  
+  current_brightness_ = static_cast<uint8_t>(brightness);
+
   // Reapply brightness to all LEDs
-  for (int i = 0; i < MAX_LED; i++) {
-    LED_Mod[i][0] = LED_Data[i][0];
-    LED_Mod[i][1] = apply_brightness_to_value(LED_Data[i][1], current_brightness);
-    LED_Mod[i][2] = apply_brightness_to_value(LED_Data[i][2], current_brightness);
-    LED_Mod[i][3] = apply_brightness_to_value(LED_Data[i][3], current_brightness);
+  for (int i = 0; i < kMaxLed; i++) {
+    led_mod_[i][0] = led_data_[i][0];
+    led_mod_[i][1] = ApplyBrightnessToValue(led_data_[i][1], current_brightness_);
+    led_mod_[i][2] = ApplyBrightnessToValue(led_data_[i][2], current_brightness_);
+    led_mod_[i][3] = ApplyBrightnessToValue(led_data_[i][3], current_brightness_);
   }
 }
 
-void WS2812_Send(void) {
-  if (ws2812.IsBusy()) {
-    return;  // Previous transmission still in progress
-  }
+bool DevWS2812::Send(void) {
+  if (my_spi_ == nullptr || IsBusy()) return false;
 
   // Clear entire buffer
-  for (size_t i = 0; i < sizeof(spiData); i++) {
-    spiData[i] = 0;
+  for (int i = 0; i < kSpiBufferSize; i++) {
+    spi_data_[i] = 0;
   }
-  
-  uint32_t spi_idx = WS2812_LEAD_IN_BYTES;  // Start after lead-in
+
+  uint32_t spi_idx = kLeadInBytes;  // Start after lead-in
 
   // Encode each LED's GRB color using lookup table
-  for (int led = 0; led < MAX_LED; led++) {
+  for (int led = 0; led < kMaxLed; led++) {
 #if USE_BRIGHTNESS
-    const uint8_t *g_spi = ws2812_spi_lookup[LED_Mod[led][1]];
-    const uint8_t *r_spi = ws2812_spi_lookup[LED_Mod[led][2]];
-    const uint8_t *b_spi = ws2812_spi_lookup[LED_Mod[led][3]];
+    const uint8_t *g_spi = ws2812_spi_lookup[led_mod_[led][1]];
+    const uint8_t *r_spi = ws2812_spi_lookup[led_mod_[led][2]];
+    const uint8_t *b_spi = ws2812_spi_lookup[led_mod_[led][3]];
 #else
-    const uint8_t *g_spi = ws2812_spi_lookup[LED_Data[led][1]];
-    const uint8_t *r_spi = ws2812_spi_lookup[LED_Data[led][2]];
-    const uint8_t *b_spi = ws2812_spi_lookup[LED_Data[led][3]];
+    const uint8_t *g_spi = ws2812_spi_lookup[led_data_[led][1]];
+    const uint8_t *r_spi = ws2812_spi_lookup[led_data_[led][2]];
+    const uint8_t *b_spi = ws2812_spi_lookup[led_data_[led][3]];
 #endif
 
     // Copy 9 bytes per LED (3 bytes each for G, R, B)
-    spiData[spi_idx++] = g_spi[0];
-    spiData[spi_idx++] = g_spi[1];
-    spiData[spi_idx++] = g_spi[2];
-    spiData[spi_idx++] = r_spi[0];
-    spiData[spi_idx++] = r_spi[1];
-    spiData[spi_idx++] = r_spi[2];
-    spiData[spi_idx++] = b_spi[0];
-    spiData[spi_idx++] = b_spi[1];
-    spiData[spi_idx++] = b_spi[2];
+    spi_data_[spi_idx++] = g_spi[0];
+    spi_data_[spi_idx++] = g_spi[1];
+    spi_data_[spi_idx++] = g_spi[2];
+    spi_data_[spi_idx++] = r_spi[0];
+    spi_data_[spi_idx++] = r_spi[1];
+    spi_data_[spi_idx++] = r_spi[2];
+    spi_data_[spi_idx++] = b_spi[0];
+    spi_data_[spi_idx++] = b_spi[1];
+    spi_data_[spi_idx++] = b_spi[2];
   }
-  
+
   // Add reset period (already zeros from buffer clear)
-  spi_idx += WS2812_RESET_BYTES;
+  spi_idx += kResetBytes;
 
   // Start SPI DMA transmission (non-blocking) with error handling
-  datasentflag = 0;
-  if (HAL_SPI_Transmit_DMA(ws2812.my_spi_, spiData, spi_idx) != HAL_OK) {
-    datasentflag = 1;  // Reset flag on error
+  dma_busy_ = 1;
+  if (HAL_SPI_Transmit_DMA(my_spi_, spi_data_, static_cast<uint16_t>(spi_idx)) != HAL_OK) {
+    dma_busy_ = 0;
+    return false;
   }
+
+  return true;
 }
 
 // --
 
 bool DevWS2812::Initialize(void) {
-  Set_LED(0, 255, 0, 0);
-  Set_LED(1, 0, 255, 0);
-  Set_LED(2, 0, 0, 255);
-  Set_LED(3, 46, 89, 128);
-  Set_LED(4, 156, 233, 100);
-  Set_LED(5, 102, 0, 235);
-  Set_LED(6, 47, 38, 77);
-  Set_LED(7, 255, 200, 0);
+  SetLED(0, 255, 0, 0);
+  SetLED(1, 0, 255, 0);
+  SetLED(2, 0, 0, 255);
+  SetLED(3, 46, 89, 128);
+  SetLED(4, 156, 233, 100);
+  SetLED(5, 102, 0, 235);
+  SetLED(6, 47, 38, 77);
+  SetLED(7, 255, 200, 0);
 
-  datasentflag = 1;  // ready to send
+  dma_busy_ = 0;
   pat_step_ = 0;
   last_now_ms_ = 0;
 
@@ -245,15 +273,15 @@ bool DevWS2812::Update(void) {
     pat_step_ = (pat_step_ + 1) % (4*8);  // Example: cycle brightness from 0-255
 
     if (pat_step_ < 8) {
-      Set_LED(pat_step_, 0,0,0);  // off
+      SetLED(pat_step_, 0,0,0);  // off
     } else if (pat_step_ < 16) {
-      Set_LED(pat_step_ - 8, 255,0,0);  // Red
+      SetLED(pat_step_ - 8, 255,0,0);  // Red
     } else if (pat_step_ < 24) {
-      Set_LED(pat_step_ - 16, 0,255,0); // Green
+      SetLED(pat_step_ - 16, 0,255,0); // Green
     } else if (pat_step_ < 32) {
-      Set_LED(pat_step_ - 24, 0,0,255); // Blue
+      SetLED(pat_step_ - 24, 0,0,255); // Blue
     }
-    WS2812_Send();
+    Send();
   }
   return true;
 }
@@ -267,36 +295,36 @@ bool DevWS2812::Loop(void) {
 #if 0    
     // Brightness sweep example (0-255 range)
     for (int i = 0; i < 256; i++) {
-      Set_Brightness(i);
-      WS2812_Send();
+      SetBrightness(i);
+      Send();
       HAL_Delay(20);
     }
 
     for (int i = 255; i >= 0; i--) {
-      Set_Brightness(i);
-      WS2812_Send();
+      SetBrightness(i);
+      Send();
       HAL_Delay(20);
     }
 #else
     // Example: simple color wipe animation
-    for (int i = 0; i < MAX_LED; i++) {
-      Set_LED(i, 0, 0, 0);  // off
-      WS2812_Send();
+    for (int i = 0; i < kMaxLed; i++) {
+      SetLED(i, 0, 0, 0);  // off
+      Send();
       HAL_Delay(100);
     }
-    for (int i = 0; i < MAX_LED; i++) {
-      Set_LED(i, 255, 0, 0);  // Red
-      WS2812_Send();
+    for (int i = 0; i < kMaxLed; i++) {
+      SetLED(i, 255, 0, 0);  // Red
+      Send();
       HAL_Delay(100);
     }
-    for (int i = 0; i < MAX_LED; i++) {
-      Set_LED(i, 0, 255, 0);  // Green
-      WS2812_Send();
+    for (int i = 0; i < kMaxLed; i++) {
+      SetLED(i, 0, 255, 0);  // Green
+      Send();
       HAL_Delay(100);
     }
-    for (int i = 0; i < MAX_LED; i++) {
-      Set_LED(i, 0, 0, 255);  // Blue
-      WS2812_Send();
+    for (int i = 0; i < kMaxLed; i++) {
+      SetLED(i, 0, 0, 255);  // Blue
+      Send();
       HAL_Delay(100);
     }
 #endif
@@ -308,14 +336,26 @@ bool DevWS2812::Loop(void) {
  * SPI DMA transmission complete callback
  */
 extern "C" void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi) {
-  if (hspi->Instance == ws2812.my_spi_->Instance) {
-    datasentflag = 1;
-  }
+  DevWS2812 *inst = DevWS2812::FindBySpiHandle(hspi);
+  if (inst != nullptr) inst->OnTxComplete();
+}
+
+extern "C" void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi) {
+  DevWS2812 *inst = DevWS2812::FindBySpiHandle(hspi);
+  if (inst != nullptr) inst->OnTxError();
 }
 
 /**
  * Check if WS2812 transmission is still in progress
  */
 bool DevWS2812::IsBusy(void) {
-  return (datasentflag == 0);
+  return (dma_busy_ != 0);
+}
+
+void DevWS2812::OnTxComplete(void) {
+  dma_busy_ = 0;
+}
+
+void DevWS2812::OnTxError(void) {
+  dma_busy_ = 0;
 }

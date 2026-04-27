@@ -15,9 +15,14 @@
 
 class DevWS2812 {
  public:
-  DevWS2812(SPI_HandleTypeDef *hspi) {
-    my_spi_ = hspi;
-  }
+  static constexpr int kMaxLed = 8;
+  static constexpr int kLeadInBytes = 3;
+  static constexpr int kResetBytes = 50;
+  static constexpr int kSpiBufferSize =
+      (9 * kMaxLed + kLeadInBytes + kResetBytes);
+  static constexpr int kMaxInstances = 2;
+
+  explicit DevWS2812(SPI_HandleTypeDef *hspi);
 
   bool Initialize(void);
 
@@ -25,16 +30,30 @@ class DevWS2812 {
 
   bool Update(void);
   bool Loop(void);
-  
+
+  void SetLED(int led_num, int red, int green, int blue);
+  void SetBrightness(int brightness);
+  bool Send(void);
   bool IsBusy(void);
+  void OnTxComplete(void);
+  void OnTxError(void);
+  static DevWS2812 *FindBySpiHandle(SPI_HandleTypeDef *hspi);
 
   SPI_HandleTypeDef *my_spi_;
 
  protected:
  private:
+  static DevWS2812 *instances_[kMaxInstances];
+  static void RegisterInstance(DevWS2812 *inst);
+  static uint8_t ApplyBrightnessToValue(uint8_t value, uint8_t brightness);
+
+  uint8_t led_data_[kMaxLed][4];
+  uint8_t led_mod_[kMaxLed][4];
+  uint8_t spi_data_[kSpiBufferSize];
+  uint8_t current_brightness_;
+  volatile uint8_t dma_busy_;
   uint8_t pat_step_;
   uint32_t last_now_ms_;
-  
 };
 
 #endif  // _DEV_WS2812_HPP_
