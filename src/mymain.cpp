@@ -5,12 +5,12 @@
 #include <stdio.h>
 
 // #include "dev_adc.hpp"
+#include "WS2812FX.h"
 #include "dev_cppm.hpp"
 #include "dev_led.hpp"
 #include "dev_pwm_duty.hpp"
 #include "dev_sbus.hpp"
 #include "dev_ws2812.hpp"
-#include "WS2812FX.h"
 #include "stm_console.hpp"
 
 // global objects
@@ -99,17 +99,18 @@ void main_loop(void) {
 
   // WS2812FX setup for ws2812_1 (library handles customShow bridge internally)
   ws2812fx_1.init(&ws2812_1);
-  ws2812fx_1.setBrightness(64);  // 
+  ws2812fx_1.setBrightness(64);  //
   ws2812fx_2.init(&ws2812_2);
   ws2812fx_2.setBrightness(64);  //
 
-  // setSegment configures LED range and initial effect; use setMode()/setSpeed() at runtime
+  // setSegment configures LED range and initial effect; use
+  // setMode()/setSpeed() at runtime
   ws2812fx_1.setSegment(0, 0, DevWS2812::kMaxLed - 1);
   ws2812fx_1.start();
   ws2812fx_2.setSegment(0, 0, DevWS2812::kMaxLed - 1);
   ws2812fx_2.start();
 
-  //ws2812fx_1.setColors(0, (uint32_t[]){0xFF0000, 0x00FF00, 0x0000FF});
+  // ws2812fx_1.setColors(0, (uint32_t[]){0xFF0000, 0x00FF00, 0x0000FF});
   ws2812fx_1.setSpeed(0, 1000);
   ws2812fx_1.setMode(0, led_mode);
   ws2812fx_2.setSpeed(0, 1000);
@@ -150,7 +151,7 @@ void main_loop(void) {
 
         ws2812fx_1.setMode(0, led_mode);
         ws2812fx_2.setMode(0, led_mode++);
-        
+
         if (led_mode > FX_MODE_RAIN) {
           led_mode = 0;
         }
@@ -175,50 +176,58 @@ void main_loop(void) {
         int sbus_count = 0;
         bool fresh = sbus.IsFresh();
         bool valid = sbus.GetChannels(sbus_ch, sbus_count);
-        if (usb_connected) {
-          if (!valid) {
-            console.Send("SBUS: --\r\n", 10);
-          } else {
-            for (int ch = 0; ch < 4; ch++) {
-              int len = snprintf((char*)buf, sizeof(buf), "SBUS%d: %4u %s\t",
-                                 ch + 1, sbus_ch[ch], fresh ? "OK" : "STALE");
-              console.Send((const char*)buf, len);
-            }
-            console.Send("\r\n", 2);
+        int len;
+        if (!valid) {
+          console.Send("SBUS: --\r\n", 10);
+        } else {
+          len = snprintf((char*)buf, sizeof(buf), "SBUS:%c ",
+                         (fresh ? ' ' : '~'));
+          console.Send((const char*)buf, len);
+          for (int ch = 0; ch < 4; ch++) {
+            len = snprintf((char*)buf, sizeof(buf), "%d: %4u\t", ch + 1,
+                           sbus_ch[ch]);
+            console.Send((const char*)buf, len);
           }
+          console.Send("\r\n", 2);
         }
       }
 #endif
 #if USE_CPPM
       {
         uint32_t cppm_pulse_us = 0, cppm_period_us = 0;
-        bool fresh = cppm.IsFresh(0);
+        // bool fresh = cppm.IsFresh(0);
         bool valid = cppm.GetChannel(0, cppm_pulse_us, cppm_period_us);
+        int len = 0;
         if (!valid) {
-          console.Send("CPPM: --\r\n", 11);
-        } else {
-          int len = snprintf(
-              (char*)buf, sizeof(buf), "CPPM CH1: %4lu us / %4lu us %s\r\n",
-              cppm_pulse_us, cppm_period_us, fresh ? "OK" : "STALE");
+          len = snprintf((char*)buf, sizeof(buf), "--\t");
           console.Send((const char*)buf, len);
+        } else {
+          for (int ch = 0; ch < 4; ch++) {
+            valid = cppm.GetChannel(ch, cppm_pulse_us, cppm_period_us);
+            len = snprintf((char*)buf, sizeof(buf), "CPPM%d: %4lu\t", ch + 1,
+                           cppm_pulse_us);
+            console.Send((const char*)buf, len);
+          }
+          console.Send("\r\n", 2);
         }
       }
+    }
 #endif
-    }
-
-    console.Update();
-    led0.Update();
-    led1.Update();
-
-    ws2812fx_1.service();   // runs WS2812FX effect and fires customShow → ws2812_1
-    ws2812fx_2.service();   // runs WS2812FX effect and fires customShow → ws2812_2
-
-    if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
-      usb_connected = true;
-      // console.Send("USB CDC Connected!" NL, 20);
-      // HAL_Delay(1000);
-      // CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
-      // HAL_Delay(100);
-    }
   }
+
+  console.Update();
+  led0.Update();
+  led1.Update();
+
+  ws2812fx_1.service();  // runs WS2812FX effect and fires customShow → ws2812_1
+  ws2812fx_2.service();  // runs WS2812FX effect and fires customShow → ws2812_2
+
+  if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
+    usb_connected = true;
+    // console.Send("USB CDC Connected!" NL, 20);
+    // HAL_Delay(1000);
+    // CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
+    // HAL_Delay(100);
+  }
+}
 }

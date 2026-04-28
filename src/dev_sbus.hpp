@@ -10,7 +10,7 @@
 
 #include "mymain.h"
 
-#define USE_SBUS 0
+#define USE_SBUS 1
 
 #define SBUS_CHANNELS       16u
 #define SBUS_FRAME_LEN      25u
