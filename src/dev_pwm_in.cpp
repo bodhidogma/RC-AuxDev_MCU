@@ -8,10 +8,10 @@
  * Period measured rise-to-rise.
  */
 
-#include "dev_pwm_duty.hpp"
+#include "dev_pwm_in.hpp"
 
 // Reference to the global instance defined in mymain.cpp
-extern DevPWMDuty pwm_duty;
+extern DevPWMIn pwm_dev_in;
 
 // Map TIM_CHANNEL_x to HAL_TIM_ACTIVE_CHANNEL_x
 // TIM_CHANNEL_1=0, CH2=4, CH3=8, CH4=12 -> shift right by 2, then use as bit index
@@ -19,8 +19,8 @@ static inline HAL_TIM_ActiveChannel chan_to_active(uint32_t hal_channel) {
   return static_cast<HAL_TIM_ActiveChannel>(1u << (hal_channel >> 2u));
 }
 
-int DevPWMDuty::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
-  if (channel_count_ >= PWM_DUTY_MAX_CHANNELS) return -1;
+int DevPWMIn::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
+  if (channel_count_ >= PWM_IN_MAX_CHANNELS) return -1;
   PwmChannel &ch    = channels_[channel_count_];
   ch.htim           = htim;
   ch.hal_channel    = hal_channel;
@@ -34,7 +34,7 @@ int DevPWMDuty::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
   return channel_count_++;
 }
 
-bool DevPWMDuty::Initialize(void) {
+bool DevPWMIn::Initialize(void) {
   for (int i = 0; i < channel_count_; i++) {
     PwmChannel &ch = channels_[i];
     __HAL_TIM_SET_CAPTUREPOLARITY(ch.htim, ch.hal_channel,
@@ -45,7 +45,7 @@ bool DevPWMDuty::Initialize(void) {
   return true;
 }
 
-void DevPWMDuty::HandleCapture(TIM_HandleTypeDef *htim) {
+void DevPWMIn::HandleCapture(TIM_HandleTypeDef *htim) {
   HAL_TIM_ActiveChannel active = htim->Channel;
 
   for (int i = 0; i < channel_count_; i++) {
@@ -81,7 +81,7 @@ void DevPWMDuty::HandleCapture(TIM_HandleTypeDef *htim) {
   }
 }
 
-bool DevPWMDuty::GetChannel(int idx, uint32_t &pulse_us,
+bool DevPWMIn::GetChannel(int idx, uint32_t &pulse_us,
                              uint32_t &period_us) const {
   if (idx < 0 || idx >= channel_count_) return false;
   const PwmChannel &ch = channels_[idx];
@@ -91,16 +91,16 @@ bool DevPWMDuty::GetChannel(int idx, uint32_t &pulse_us,
   return true;
 }
 
-bool DevPWMDuty::IsFresh(int idx) const {
+bool DevPWMIn::IsFresh(int idx) const {
   if (idx < 0 || idx >= channel_count_) return false;
   const PwmChannel &ch = channels_[idx];
   if (!ch.valid) return false;
-  return (HAL_GetTick() - ch.last_update_ms) < PWM_DUTY_STALE_MS;
+  return (HAL_GetTick() - ch.last_update_ms) < PWM_IN_STALE_MS;
 }
 
 /** HAL input capture callback — dispatches to the capture manager. */
-#if USE_PWM_DUTY
+#if USE_PWM_IN
 extern "C" void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  pwm_duty.HandleCapture(htim);
+  pwm_dev_in.HandleCapture(htim);
 }
 #endif

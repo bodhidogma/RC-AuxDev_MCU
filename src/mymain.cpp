@@ -8,7 +8,7 @@
 #include "WS2812FX.h"
 #include "dev_cppm.hpp"
 #include "dev_led.hpp"
-#include "dev_pwm_duty.hpp"
+#include "dev_pwm_in.hpp"
 #include "dev_sbus.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
@@ -29,10 +29,10 @@ DevLED led0(LED0_GPIO_Port, LED0_Pin);
 DevLED led1(LED1_GPIO_Port, LED1_Pin);
 
 // DevADC adc0(&hadc1);
-#if USE_PWM_DUTY
+#if USE_PWM_IN
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
 // CH1=PA6, CH2=PA4, CH3=PB0, CH4=PB1
-DevPWMDuty pwm_duty;
+DevPWMIn pwm_dev_in;
 #endif
 #if USE_SBUS
 // SBUS RC receiver input — USART2, 100000 baud 8E2, RX-pin inverted
@@ -79,12 +79,12 @@ void main_loop(void) {
   // init global classes
   console.Initialize();
   // adc0.Initialize();
-#if USE_PWM_DUTY
-  pwm_duty.Register(&htim3, TIM_CHANNEL_1);  // PB4
-  pwm_duty.Register(&htim3, TIM_CHANNEL_2);  // PB5
-  pwm_duty.Register(&htim3, TIM_CHANNEL_3);  // PB0
-  pwm_duty.Register(&htim3, TIM_CHANNEL_4);  // PB1
-  pwm_duty.Initialize();
+#if USE_PWM_IN
+  pwm_dev_in.Register(&htim3, TIM_CHANNEL_1);  // PB4
+  pwm_dev_in.Register(&htim3, TIM_CHANNEL_2);  // PB5
+  pwm_dev_in.Register(&htim3, TIM_CHANNEL_3);  // PB0
+  pwm_dev_in.Register(&htim3, TIM_CHANNEL_4);  // PB1
+  pwm_dev_in.Initialize();
 #endif
 #if USE_SBUS
   sbus.Initialize(&huart2);
@@ -158,11 +158,11 @@ void main_loop(void) {
       }
 
       // Print pulse width for each RC channel
-#if USE_PWM_DUTY
-      for (int ch = 0; ch < pwm_duty.channel_count_; ch++) {
+#if USE_PWM_IN
+      for (int ch = 0; ch < pwm_dev_in.channel_count_; ch++) {
         uint32_t pulse_us = 0, period_us = 0;
-        bool fresh = pwm_duty.IsFresh(ch);
-        pwm_duty.GetChannel(ch, pulse_us, period_us);
+        bool fresh = pwm_dev_in.IsFresh(ch);
+        pwm_dev_in.GetChannel(ch, pulse_us, period_us);
         int len = snprintf((char*)buf, sizeof(buf), "CH%d: %4lu us %s\t",
                            ch + 1, pulse_us, fresh ? "OK" : "--");
         console.Send((const char*)buf, len);

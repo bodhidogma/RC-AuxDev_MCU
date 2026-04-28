@@ -4,15 +4,15 @@
  * Supports up to 4 channels: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
  */
 
-#ifndef _DEV_PWM_DUTY_HPP_
-#define _DEV_PWM_DUTY_HPP_
+#ifndef _DEV_PWM_IN_HPP_
+#define _DEV_PWM_IN_HPP_
 
 #include "mymain.h"
 
-#define USE_PWM_DUTY 0
+#define USE_PWM_IN 0
 
-#define PWM_DUTY_MAX_CHANNELS  4
-#define PWM_DUTY_STALE_MS      100u   // ms without update before channel marked stale
+#define PWM_IN_MAX_CHANNELS  4
+#define PWM_IN_STALE_MS      100u   // ms without update before channel marked stale
 
 struct PwmChannel {
   TIM_HandleTypeDef *htim;
@@ -26,9 +26,9 @@ struct PwmChannel {
   bool      valid;             // true after first full pulse captured
 };
 
-class DevPWMDuty {
+class DevPWMIn {
  public:
-  DevPWMDuty() {}
+  DevPWMIn() {}
 
   // Register a channel prior to Initialize(). Returns 0-based index, or -1 if full.
   int  Register(TIM_HandleTypeDef *htim, uint32_t hal_channel);
@@ -46,7 +46,7 @@ class DevPWMDuty {
   bool IsFresh(int idx) const;
 
   int        channel_count_ = 0;
-  PwmChannel channels_[PWM_DUTY_MAX_CHANNELS];
+  PwmChannel channels_[PWM_IN_MAX_CHANNELS];
 };
 
-#endif  // _DEV_PWM_DUTY_HPP_
+#endif  // _DEV_PWM_IN_HPP_
