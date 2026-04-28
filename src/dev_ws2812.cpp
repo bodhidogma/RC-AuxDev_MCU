@@ -7,6 +7,8 @@
 
 #define USE_BRIGHTNESS 1
 
+const uint8_t kDefaultBrightness = 64; // max brightness (0-255)
+
 // Lookup table: converts one WS2812 byte to 3 SPI bytes
 // Each WS2812 bit encoded as 3 SPI bits: '1'=110, '0'=100
 static const uint8_t ws2812_spi_lookup[256][3] = {
@@ -100,7 +102,7 @@ const uint8_t gammaTable[] = {
 DevWS2812 *DevWS2812::instances_[DevWS2812::kMaxInstances] = {nullptr};
 
 DevWS2812::DevWS2812(SPI_HandleTypeDef *hspi)
-    : my_spi_(hspi), current_brightness_(64), dma_busy_(0), pat_step_(0), last_now_ms_(0) {
+    : my_spi_(hspi), current_brightness_(kDefaultBrightness), dma_busy_(0), pat_step_(0), last_now_ms_(0) {
   for (int i = 0; i < kMaxLed; i++) {
     led_data_[i][0] = 0;
     led_data_[i][1] = 0;

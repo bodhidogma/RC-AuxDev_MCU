@@ -28,8 +28,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
-# Enable CMake support for ASM and C languages
-enable_language(C ASM)
+# Enable CMake support for ASM, C, and C++ languages
+enable_language(C CXX ASM)
 
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
@@ -53,6 +53,11 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_sbus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_cppm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_ws2812.cpp
+    # WS2812FX effects library
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812_lib/Adafruit_NeoPixel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812_lib/WS2812FX.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812_lib/modes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812_lib/modes_funcs.cpp
 )
 
 # Add include paths
@@ -60,11 +65,13 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     ${CMAKE_CURRENT_SOURCE_DIR}/Src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ws2812_lib
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+    STM32_WS2812FX
 )
 
 # Remove wrong libob.a library dependency when using cpp files

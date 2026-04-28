@@ -9,7 +9,7 @@
 
 #include "mymain.h"
 
-#define USE_PWM_DUTY 1
+#define USE_PWM_DUTY 0
 
 #define PWM_DUTY_MAX_CHANNELS  4
 #define PWM_DUTY_STALE_MS      100u   // ms without update before channel marked stale
