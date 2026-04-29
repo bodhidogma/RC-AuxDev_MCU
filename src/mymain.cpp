@@ -9,11 +9,14 @@
 #include "dev_cppm.hpp"
 #include "dev_led.hpp"
 #include "dev_pwm_in.hpp"
+#include "dev_pwm_out.hpp"
 #include "dev_sbus.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
 
 // global objects
+
+// transmitter modes: AETR, TAER
 
 // extern ADC_HandleTypeDef hadc1;
 
@@ -31,10 +34,12 @@ DevLED led1(LED1_GPIO_Port, LED1_Pin);
 // DevADC adc0(&hadc1);
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
 DevPWMIn pwm_dev_in;
-// SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted
+// SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted (TAER)
 DevSBus sbus;
-// CPPM RC receiver input — single-wire PPM sum on one TIM IC pin
+// CPPM RC receiver input — single-wire PPM sum on one TIM IC pin (AETR)
 DevCPPM cppm;
+// PWM output — TIM4, 4 channels, 1 MHz tick
+DevPWMOut pwm_dev_out;
 
 // WS2812 RGB LED strip driver, using SPI1/2 (PA7/PB15=MOSI)
 DevWS2812 ws2812_1(&hspi1);
@@ -78,13 +83,22 @@ void main_loop(void) {
   // trust IOC Override example for pin-stacking:
   //   { TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL,
   //   GPIO_SPEED_FREQ_LOW }
-  static const PwmInChanConfig kPwmChannels[] = {
+  static const PwmInChanConfig kPwmInChannels[] = {
       {&htim3, TIM_CHANNEL_1},  // PA6
       {&htim3, TIM_CHANNEL_2},  // PA4
       {&htim3, TIM_CHANNEL_3},  // PB0
       {&htim3, TIM_CHANNEL_4},  // PB1
   };
-  pwm_dev_in.Initialize(kPwmChannels, 4);
+  pwm_dev_in.Initialize(kPwmInChannels, 4);
+#elif USE_PWM_OUT
+  // Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4)
+  static const PwmOutChanConfig kPwmOutChannels[] = {
+      {&htim3, TIM_CHANNEL_1},  // PA6
+      {&htim3, TIM_CHANNEL_2},  // PA4
+      {&htim3, TIM_CHANNEL_3},  // PB0
+      {&htim3, TIM_CHANNEL_4},  // PB1
+  };
+  pwm_dev_out.Initialize(kPwmOutChannels, 4);
 #endif
 #if USE_SBUS
   // Default: IOC/CubeMX already configured the RX GPIO for USART3 on PB11.
@@ -101,7 +115,7 @@ void main_loop(void) {
       TIM_CHANNEL_4,
       {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}};
   cppm.Initialize(&kCppmConfig, 1);
-  //cppm.Initialize(&htim3, TIM_CHANNEL_1);  // alternative: PA6 = TIM3_CH1
+  // cppm.Initialize(&htim3, TIM_CHANNEL_1);  // alternative: PA6 = TIM3_CH1
 #endif
 
   ws2812_1.Initialize();
@@ -130,12 +144,6 @@ void main_loop(void) {
   led0.SetPattern(DevLED::BLINK1);
   led1.SetPattern(DevLED::BLINK3);
 
-  // ws2812.Loop();
-
-  // HAL_GPIO_WritePin(GPIOB, LED1_Pin|LED0_Pin, GPIO_PIN_RESET);	// RESET
-  // HAL_GPIO_WritePin(LED0_GPIO_Port, LED0_Pin, GPIO_PIN_SET);
-  // HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
-
   while (1) {
     sys_now_ms = millis();
 
@@ -143,12 +151,6 @@ void main_loop(void) {
       last_now_ms_ = sys_now_ms;
       count_s++;
 
-      // HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);
-      // fprintf( stderr, ".");
-      // printf(".");
-      // console.Send(".", 1);
-      // console.Send("some data --", 12);
-      // console.Send("++ more bytes! ", 15);
       if (usb_connected) {
         // console.Send("USB OK\r\n", 8);
         // console.Send(".", 1);
@@ -184,7 +186,7 @@ void main_loop(void) {
         console.Send("\r\n", 2);
       }
 #endif
-#if USE_SBUS    // Print SBUS status (first 4 channels)
+#if USE_SBUS  // Print SBUS status (first 4 channels)
       {
         uint16_t sbus_ch[SBUS_CHANNELS];
         uint8_t sbus_count = 0;
@@ -229,6 +231,38 @@ void main_loop(void) {
       }
 #endif
     }
+
+#if USE_PWM_OUT
+    uint16_t servo_pos = 0;
+    bool fresh = false, valid = false;
+#if USE_PWM_IN
+#elif USE_SBUS
+    uint16_t sbus_ch[SBUS_CHANNELS];
+    uint8_t sbus_count = 0;
+    fresh = sbus.IsFresh();
+    valid = sbus.GetChannels(sbus_ch, sbus_count);
+    if (valid && fresh) {
+      // Example: map first SBUS channel to a servo PWM output
+      // pwm = 1000 + (sbus - 172) * (2000-1000) / (1811-172)
+      // pwm = 1000 + (sbus - 172) * 0.61012
+      servo_pos =
+          1000 + (uint16_t)((sbus_ch[2] - 172) * 0.61012);  // #3 == elev
+    }
+#elif USE_CPPM
+    uint16_t cppm_ch[CPPM_CHANNELS];
+    uint8_t cppm_count = 0;
+    uint16_t period_us = 0;
+    fresh = cppm.IsFresh();
+    valid = cppm.GetChannels(cppm_ch, cppm_count, period_us);
+    if (valid && fresh) {
+      // Example: map first CPPM channel to a servo PWM output
+      servo_pos = cppm_ch[1];  // #1 == elevator
+    }
+#endif
+    if (servo_pos) {
+      pwm_dev_out.SetPulseUs(3, servo_pos);
+    }
+#endif
 
     console.Update();
     led0.Update();

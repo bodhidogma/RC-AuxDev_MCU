@@ -47,6 +47,9 @@ extern DMA_HandleTypeDef hdma_spi2_tx;
 
 // enable at startup / runtime, but for now just choose 1
 #define USE_PWM_IN 0
+#if !USE_PWM_IN
+#define USE_PWM_OUT 1
+#endif
 #define USE_SBUS 0
 #if !USE_SBUS
 #define USE_CPPM 1
