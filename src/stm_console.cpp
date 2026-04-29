@@ -20,7 +20,7 @@ extern DevLED led1;
 //extern DevSBus sbus;
 
 // global uart rx buffer
-uint8_t uart1_rx_buffer_[1];
+uint8_t console_uart_rx_buffer_[1];
 
 /**
  *
@@ -51,9 +51,9 @@ bool StmConsole::Initialize(void) {
 
   // kick off UART rx - trigger callback when RX data
   if (my_huart_ != nullptr) {
-    HAL_UART_Receive_IT(my_huart_, uart1_rx_buffer_, 1);
-    // HAL_UART_Receive_IT(my_huart_, uart1_rx_buffer_, 1);
-    // HAL_UART_Receive_DMA(my_huart_, uart1_rx_buffer_, 1);
+    HAL_UART_Receive_IT(my_huart_, console_uart_rx_buffer_, 1);
+    // HAL_UART_Receive_IT(my_huart_, console_uart_rx_buffer_, 1);
+    // HAL_UART_Receive_DMA(my_huart_, console_uart_rx_buffer_, 1);
   } else {
   }
   return true;

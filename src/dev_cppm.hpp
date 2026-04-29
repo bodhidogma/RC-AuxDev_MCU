@@ -20,9 +20,28 @@
 #define CPPM_SYNC_GAP_US 3000u  // gap >= this is treated as frame sync
 #define CPPM_STALE_MS 100u      // ms without update before data marked stale
 
+// Optional GPIO override for CPPM input capture pin.
+// Set port = nullptr to trust IOC/CubeMX default pin assignment.
+struct CppmGpioConfig {
+  GPIO_TypeDef* port;      // nullptr = use IOC default
+  uint16_t pin;            // e.g. GPIO_PIN_11
+  uint32_t alternate;      // e.g. GPIO_AF1_TIM2
+  uint32_t pull;           // GPIO_NOPULL / GPIO_PULLUP / GPIO_PULLDOWN
+  uint32_t speed;          // GPIO_SPEED_FREQ_LOW / HIGH
+};
+
+// CPPM input registration config.
+struct CppmInputConfig {
+  TIM_HandleTypeDef* htim;   // required
+  uint32_t hal_channel;      // TIM_CHANNEL_1 .. TIM_CHANNEL_4
+  CppmGpioConfig gpio = {nullptr, 0, 0, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW};
+};
+
 struct CppmInput {
   TIM_HandleTypeDef* htim;
   uint32_t hal_channel;              // TIM_CHANNEL_1 .. TIM_CHANNEL_4
+  CppmGpioConfig gpio_cfg;           // requested/active GPIO config
+  bool use_gpio_override;            // true when gpio_cfg should be applied
   uint16_t prev_tick;                // counter value at last rising edge
   uint16_t channels[CPPM_CHANNELS];  // decoded pulse widths in µs
   uint16_t frame_period_us;          // full frame period in µs
@@ -40,9 +59,13 @@ class DevCPPM {
 
   // Register a CPPM input prior to Initialize(). Returns 0-based index, or -1
   // if full.
-  int Register(TIM_HandleTypeDef* htim, uint32_t hal_channel);
+  int Register(const CppmInputConfig& cfg);
 
-  // Start IC interrupts on all registered inputs.
+  // Start IC interrupts on all provided inputs.
+  // Call with gpio.port == nullptr to trust IOC defaults.
+  bool Initialize(const CppmInputConfig* configs, int count);
+
+  // Backward-compatible wrapper.
   bool Initialize(TIM_HandleTypeDef* htim, uint32_t hal_channel);
 
   // Call from HAL_TIM_IC_CaptureCallback.

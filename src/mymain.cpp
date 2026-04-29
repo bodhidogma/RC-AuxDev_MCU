@@ -29,18 +29,12 @@ DevLED led0(LED0_GPIO_Port, LED0_Pin);
 DevLED led1(LED1_GPIO_Port, LED1_Pin);
 
 // DevADC adc0(&hadc1);
-#if USE_PWM_IN
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
 DevPWMIn pwm_dev_in;
-#endif
-#if USE_SBUS
 // SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted
 DevSBus sbus;
-#endif
-#if USE_CPPM
 // CPPM RC receiver input — single-wire PPM sum on one TIM IC pin
 DevCPPM cppm;
-#endif
 
 // WS2812 RGB LED strip driver, using SPI1/2 (PA7/PB15=MOSI)
 DevWS2812 ws2812_1(&hspi1);
@@ -93,16 +87,21 @@ void main_loop(void) {
   pwm_dev_in.Initialize(kPwmChannels, 4);
 #endif
 #if USE_SBUS
-  // Default: IOC/CubeMX already configured the RX GPIO (USART2 → PB4 AF7).
-  // Override example for pin-stacking — supply a non-null SBusRxConfig:
-  //   static const SBusRxConfig sbus_rx = { GPIOA, GPIO_PIN_3, GPIO_AF7_USART2,
-  //                                         GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH
-  //                                         };
-  //   sbus.Initialize(&huart2, &sbus_rx);
+  // Default: IOC/CubeMX already configured the RX GPIO for USART3 on PB11.
+  // If PB11 is assigned to CPPM, SBUS must remain disabled at boot.
   sbus.Initialize(huart3);
-#endif
-#if USE_CPPM
-  cppm.Initialize(&htim3, TIM_CHANNEL_1);
+#elif USE_CPPM
+  // Default CPPM target on shared PB11: TIM2_CH4.
+  // Non-null port means runtime override is applied by DevCPPM.
+  // TIM2_CH4 on PB11 (shared stack with USART3_RX).
+  // GPIO must be configured explicitly — TIM2 MSP only sets up clock + IRQ,
+  // no pin config. Override applies PB11 as AF1 (TIM2_CH4) input.
+  static const CppmInputConfig kCppmConfig = {
+      &htim2,
+      TIM_CHANNEL_4,
+      {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}};
+  cppm.Initialize(&kCppmConfig, 1);
+  //cppm.Initialize(&htim3, TIM_CHANNEL_1);  // alternative: PA6 = TIM3_CH1
 #endif
 
   ws2812_1.Initialize();
@@ -168,8 +167,7 @@ void main_loop(void) {
         }
       }
 
-      // Print pulse width for each RC channel
-#if USE_PWM_IN
+#if USE_PWM_IN  // Print pulse width for each RC channel
       {
         uint32_t pulse_us = 0, period_us = 0;
         bool fresh;
@@ -186,19 +184,18 @@ void main_loop(void) {
         console.Send("\r\n", 2);
       }
 #endif
-      // Print SBUS status (first 4 channels)
-#if USE_SBUS
+#if USE_SBUS    // Print SBUS status (first 4 channels)
       {
         uint16_t sbus_ch[SBUS_CHANNELS];
-        int sbus_count = 0;
+        uint8_t sbus_count = 0;
         bool fresh = sbus.IsFresh();
         bool valid = sbus.GetChannels(sbus_ch, sbus_count);
         int len;
         if (!valid) {
           console.Send("SBUS: --\r\n", 10);
         } else {
-          len = snprintf((char*)buf, sizeof(buf), "SBUS[%d]:%c ",
-                         sbus_count, (fresh ? ' ' : '~'));
+          len = snprintf((char*)buf, sizeof(buf), "SBUS[%d]:%c ", sbus_count,
+                         (fresh ? ' ' : '~'));
           console.Send((const char*)buf, len);
           for (int ch = 0; ch < sbus_count; ch++) {
             len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
@@ -208,9 +205,7 @@ void main_loop(void) {
           console.Send("\r\n", 2);
         }
       }
-#endif
-      // Print CPPM status (first 4 channels)
-#if USE_CPPM
+#elif USE_CPPM  // Print CPPM status (first 4 channels)
       {
         uint16_t cppm_ch[CPPM_CHANNELS];
         uint8_t cppm_count = 0;
@@ -222,7 +217,7 @@ void main_loop(void) {
           console.Send("CPPM: --\r\n", 10);
         } else {
           len = snprintf((char*)buf, sizeof(buf), "CPPM[%d @ %dms]:%c ",
-                         cppm_count, period_us/1000, (fresh ? ' ' : '~'));
+                         cppm_count, period_us / 1000, (fresh ? ' ' : '~'));
           console.Send((const char*)buf, len);
           for (int ch = 0; ch < cppm_count; ch++) {
             len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
