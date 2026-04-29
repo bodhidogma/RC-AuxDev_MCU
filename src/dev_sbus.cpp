@@ -11,7 +11,15 @@
  * the accumulator, so the next 0x0F byte starts a fresh frame.
  *
  * Single-byte interrupt-driven receive (matches stm_console pattern).
- * HandleRx() is called from HAL_UART_RxCpltCallback in stm_console.cpp.
+ * HandleRx() is called from HAL_UART_RxCpltCallback in stm_callbacks.cpp.
+ *
+ * Hardware binding:
+ *   Default path  — IOC/CubeMX already configured the RX GPIO; Initialize()
+ *                   validates the UART instance and arms HAL_UART_Receive_IT.
+ *   Override path — caller passes a non-null SBusRxConfig; Initialize() calls
+ *                   HAL_GPIO_Init to re-map the RX pin before arming IT.
+ *                   Useful when pin-stacking prevents CubeMX from configuring
+ *                   the desired pin assignment in the .ioc file.
  */
 
 /*
@@ -32,33 +40,93 @@ improve implementation:
 extern DevSBus sbus;
 
 // ---------------------------------------------------------------------------
+// Default RX pin table — one entry per supported UART instance.
+// Values must match the IOC/MspInit configuration for that peripheral so
+// the default (no-override) path stays consistent with CubeMX output.
+// Add entries here when enabling additional UART instances.
+// ---------------------------------------------------------------------------
+static const struct {
+  USART_TypeDef     *instance;
+  SBusRxConfig       config;
+} kDefaultRxMap[] = {
+  { USART2, { GPIOB, GPIO_PIN_4, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH } },
+  // { USART3, { GPIOB, GPIO_PIN_11, GPIO_AF7_USART3, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH } },
+};
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+// Enable the AHB peripheral clock for the given GPIO port.
+// Uses HAL RCC helper macros — idempotent if clock is already enabled.
+static bool EnableGpioClock(GPIO_TypeDef *port) {
+  if      (port == GPIOA) { __HAL_RCC_GPIOA_CLK_ENABLE(); }
+  else if (port == GPIOB) { __HAL_RCC_GPIOB_CLK_ENABLE(); }
+  else if (port == GPIOC) { __HAL_RCC_GPIOC_CLK_ENABLE(); }
+  else if (port == GPIOD) { __HAL_RCC_GPIOD_CLK_ENABLE(); }
+  else if (port == GPIOE) { __HAL_RCC_GPIOE_CLK_ENABLE(); }
+  else if (port == GPIOF) { __HAL_RCC_GPIOF_CLK_ENABLE(); }
+  else { return false; }
+  return true;
+}
+
+// Look up the default RX config for a given UART handle.
+static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
+  for (const auto &entry : kDefaultRxMap) {
+    if (huart->Instance == entry.instance) {
+      out = entry.config;
+      return true;
+    }
+  }
+  return false;  // unsupported UART instance
+}
+
+// Apply GPIO binding for the RX pin using HAL_GPIO_Init.
+// Called only when an override is provided; the default IOC config is left as-is.
+static bool ApplyHardwareBinding(const SBusRxConfig &cfg) {
+  if (!EnableGpioClock(cfg.port)) return false;
+  GPIO_InitTypeDef gpio = {};
+  gpio.Pin       = cfg.pin;
+  gpio.Mode      = GPIO_MODE_AF_PP;
+  gpio.Pull      = cfg.pull;
+  gpio.Speed     = cfg.speed;
+  gpio.Alternate = cfg.alternate;
+  HAL_GPIO_Init(cfg.port, &gpio);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-bool DevSBus::Initialize(UART_HandleTypeDef *huart) {
-  my_huart_      = huart;
-  rx_index_      = 0;
-  valid_         = false;
-  last_rx_ms_    = 0;
-  last_update_ms_= 0;
-  flags_         = 0;
+DevSBus::DevSBus(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override)
+  : my_huart_(&huart), rx_override_(rx_override) {
+}
+
+bool DevSBus::Initialize() {
+  rx_index_       = 0;
+  valid_          = false;
+  last_rx_ms_     = 0;
+  last_update_ms_ = 0;
+  flags_          = 0;
   memset(channels_, 0, sizeof(channels_));
   memset(rx_buffer_, 0, sizeof(rx_buffer_));
 
-  GPIO_TypeDef *rx_port = nullptr;
-  uint16_t rx_pin = 0;
-
-  if (my_huart_ == &huart2) {
-    rx_port = GPIOB;
-    rx_pin = GPIO_PIN_4;
-  }
-  else {
-    // Unsupported UART instance
-    return false;
+  // Validate that we have a default mapping for this UART instance.
+  if (!ResolveDefaultConfig(my_huart_, rx_config_)) {
+    return false;  // unsupported UART — do not arm IT
   }
 
-  // Arm single-byte interrupt receive
+  // Override path: re-init RX GPIO to caller-supplied pin/AF via HAL_GPIO_Init.
+  // Default path: IOC/MspInit already configured the pin — nothing extra needed.
+  if (rx_override_ != nullptr) {
+    rx_config_ = *rx_override_;
+    if (!ApplyHardwareBinding(rx_config_)) {
+      return false;
+    }
+  }
 
+  // Arm single-byte interrupt receive.
   HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
   return true;
 }

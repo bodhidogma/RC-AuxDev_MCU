@@ -31,12 +31,20 @@ DevLED led1(LED1_GPIO_Port, LED1_Pin);
 // DevADC adc0(&hadc1);
 #if USE_PWM_IN
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
-// CH1=PA6, CH2=PA4, CH3=PB0, CH4=PB1
-DevPWMIn pwm_dev_in;
+// Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4) — null port = trust IOC
+// Override example for pin-stacking:
+//   { TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW }
+static const PwmInChanConfig kPwmChannels[] = {
+  { TIM_CHANNEL_1 },  // PA6
+  { TIM_CHANNEL_2 },  // PA4
+  { TIM_CHANNEL_3 },  // PB0
+  { TIM_CHANNEL_4 },  // PB1
+};
+DevPWMIn pwm_dev_in(htim3, kPwmChannels, 4);
 #endif
 #if USE_SBUS
 // SBUS RC receiver input — USART2, 100000 baud 8E2, RX-pin inverted
-DevSBus sbus;
+DevSBus sbus(huart2);
 #endif
 #if USE_CPPM
 // CPPM RC receiver input — single-wire PPM sum on one TIM IC pin
@@ -80,14 +88,16 @@ void main_loop(void) {
   console.Initialize();
   // adc0.Initialize();
 #if USE_PWM_IN
-  pwm_dev_in.Register(&htim3, TIM_CHANNEL_1);  // PB4
-  pwm_dev_in.Register(&htim3, TIM_CHANNEL_2);  // PB5
-  pwm_dev_in.Register(&htim3, TIM_CHANNEL_3);  // PB0
-  pwm_dev_in.Register(&htim3, TIM_CHANNEL_4);  // PB1
   pwm_dev_in.Initialize();
 #endif
 #if USE_SBUS
-  sbus.Initialize(&huart2);
+  // Default: IOC/CubeMX already configured the RX GPIO (USART2 → PB4 AF7).
+  // Override example for pin-stacking — supply a non-null SBusRxConfig:
+  //   static const SBusRxConfig sbus_rx = { GPIOA, GPIO_PIN_3, GPIO_AF7_USART2,
+  //                                         GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH
+  //                                         };
+  //   sbus.Initialize(&huart2, &sbus_rx);
+  sbus.Initialize();
 #endif
 #if USE_CPPM
   cppm.Register(&htim3, TIM_CHANNEL_1);  // PB4
@@ -159,15 +169,21 @@ void main_loop(void) {
 
       // Print pulse width for each RC channel
 #if USE_PWM_IN
-      for (int ch = 0; ch < pwm_dev_in.channel_count_; ch++) {
+      {
         uint32_t pulse_us = 0, period_us = 0;
-        bool fresh = pwm_dev_in.IsFresh(ch);
-        pwm_dev_in.GetChannel(ch, pulse_us, period_us);
-        int len = snprintf((char*)buf, sizeof(buf), "CH%d: %4lu us %s\t",
-                           ch + 1, pulse_us, fresh ? "OK" : "--");
+        bool fresh;
+        int len;
+        len = snprintf((char*)buf, sizeof(buf), "PWM IN: ");
         console.Send((const char*)buf, len);
+        for (int ch = 0; ch < pwm_dev_in.channel_count_; ch++) {
+          fresh = pwm_dev_in.IsFresh(ch);
+          pwm_dev_in.GetChannel(ch, pulse_us, period_us);
+          len = snprintf((char*)buf, sizeof(buf), "%d:%c%4lu\t", ch + 1,
+                         fresh ? ' ' : '~', pulse_us);
+          console.Send((const char*)buf, len);
+        }
+        console.Send("\r\n", 2);
       }
-      console.Send("\r\n", 2);
 #endif
       // Print SBUS status (first 4 channels)
 #if USE_SBUS

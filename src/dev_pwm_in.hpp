@@ -1,7 +1,12 @@
 /**
  * Multi-channel RC PWM input capture driver.
  * Uses TIM3 independent IC mode, 1 MHz tick (prescaler=71).
- * Supports up to 4 channels: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
+ * Default channels (IOC/CubeMX config): PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
+ *
+ * Hardware binding:
+ *   - Default: set port = nullptr in PwmInChanConfig → IOC already configured the GPIO.
+ *   - Override: provide port/pin/alternate fields → HAL_GPIO_Init is called per-channel
+ *     during Initialize() (e.g. for pin-stacking or alternate pad routing).
  */
 
 #ifndef _DEV_PWM_IN_HPP_
@@ -12,26 +17,42 @@
 #define PWM_IN_MAX_CHANNELS  4
 #define PWM_IN_STALE_MS      100u   // ms without update before channel marked stale
 
+// Per-channel GPIO configuration.
+// Set port = nullptr to use the IOC/CubeMX default pin assignment for this channel.
+// Set all fields to override: HAL_GPIO_Init is called during Initialize().
+struct PwmInChanConfig {
+  uint32_t      hal_channel;  // TIM_CHANNEL_1 .. TIM_CHANNEL_4 (required)
+  GPIO_TypeDef *port;         // nullptr = use IOC default; non-null = override
+  uint16_t      pin;          // e.g. GPIO_PIN_6
+  uint32_t      alternate;    // e.g. GPIO_AF2_TIM3
+  uint32_t      pull;         // GPIO_NOPULL / GPIO_PULLUP / GPIO_PULLDOWN
+  uint32_t      speed;        // GPIO_SPEED_FREQ_LOW etc.
+};
+
 struct PwmChannel {
-  TIM_HandleTypeDef *htim;
-  uint32_t  hal_channel;       // TIM_CHANNEL_1 .. TIM_CHANNEL_4
-  uint16_t  rise_tick;         // counter value at last rising edge
-  uint16_t  prev_rise_tick;    // counter value at previous rising edge (for period)
-  uint32_t  pulse_us;          // high pulse width in microseconds
-  uint32_t  period_us;         // full period in microseconds
-  uint32_t  last_update_ms;    // HAL_GetTick() at last completed capture
-  bool      expect_rise;       // true = waiting for rising edge
-  bool      valid;             // true after first full pulse captured
+  TIM_HandleTypeDef  *htim;
+  uint32_t            hal_channel;       // TIM_CHANNEL_1 .. TIM_CHANNEL_4
+  PwmInChanConfig     gpio_cfg;          // resolved GPIO config for this channel
+  uint16_t            rise_tick;         // counter value at last rising edge
+  uint16_t            prev_rise_tick;    // counter value at previous rising edge (for period)
+  uint32_t            pulse_us;          // high pulse width in microseconds
+  uint32_t            period_us;         // full period in microseconds
+  uint32_t            last_update_ms;    // HAL_GetTick() at last completed capture
+  bool                expect_rise;       // true = waiting for rising edge
+  bool                valid;             // true after first full pulse captured
 };
 
 class DevPWMIn {
  public:
-  DevPWMIn() {}
+  // Construct with timer + channel config array.
+  // Constructor calls Register() for each entry; Initialize() activates capture.
+  DevPWMIn(TIM_HandleTypeDef &htim, const PwmInChanConfig *configs, int count);
 
-  // Register a channel prior to Initialize(). Returns 0-based index, or -1 if full.
-  int  Register(TIM_HandleTypeDef *htim, uint32_t hal_channel);
+  // Register a channel manually (e.g. for dynamic or post-construction use).
+  // Returns 0-based index, or -1 if full.
+  int  Register(const PwmInChanConfig &cfg);
 
-  // Start IC interrupts on all registered channels.
+  // Apply GPIO overrides (where specified) and start IC interrupts on all registered channels.
   bool Initialize(void);
 
   // Call from HAL_TIM_IC_CaptureCallback.
@@ -40,11 +61,12 @@ class DevPWMIn {
   // Read latest measurement for channel idx. Returns false if not yet valid.
   bool GetChannel(int idx, uint32_t &pulse_us, uint32_t &period_us) const;
 
-  // Returns false if no capture within PWM_DUTY_STALE_MS or not yet valid.
+  // Returns false if no capture within PWM_IN_STALE_MS or not yet valid.
   bool IsFresh(int idx) const;
 
-  int        channel_count_ = 0;
-  PwmChannel channels_[PWM_IN_MAX_CHANNELS];
+  int                channel_count_ = 0;
+  TIM_HandleTypeDef *my_htim_       = nullptr;
+  PwmChannel         channels_[PWM_IN_MAX_CHANNELS];
 };
 
 #endif  // _DEV_PWM_IN_HPP_
