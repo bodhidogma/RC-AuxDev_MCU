@@ -38,13 +38,13 @@ struct SBusRxConfig {
 
 class DevSBus {
  public:
-  DevSBus(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override = nullptr);
+  DevSBus() {};
 
   // Reset state, resolve hardware binding, arm single-byte IT receive.
   // rx_override == nullptr → trust IOC default GPIO config for the selected UART.
   // rx_override != nullptr → re-init the RX pin using HAL_GPIO_Init with override fields.
   // Returns false if the UART instance is unsupported or GPIO clock enable fails.
-  bool Initialize();
+  bool Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override = nullptr);
 
   // Returns the active UART handle — used by the RX callback to route bytes here.
   UART_HandleTypeDef *MyHuart() const { return my_huart_; }
@@ -71,7 +71,6 @@ class DevSBus {
 
   UART_HandleTypeDef *my_huart_  = nullptr;
   SBusRxConfig        rx_config_ = {};      // resolved active RX GPIO config
-  const SBusRxConfig     *rx_override_ = nullptr;
 
   uint8_t  rx_buffer_[SBUS_FRAME_LEN];
   int      rx_index_             = 0;

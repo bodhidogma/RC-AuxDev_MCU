@@ -1,4 +1,6 @@
 /* RC PWM multi-channel input capture via TIM3.
+ * 
+ * GPIO pins are shared between PWM IN / OUT (read RC input or drive RC output)
  *
  * TIM3 config: prescaler=71, 1 MHz tick (1 tick = 1 us).
  * Default channels (IOC/CubeMX config): PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
@@ -59,30 +61,10 @@ static bool ApplyChannelGpio(const PwmInChanConfig &cfg) {
 // DevPWMIn implementation
 // ---------------------------------------------------------------------------
 
-DevPWMIn::DevPWMIn(TIM_HandleTypeDef &htim, const PwmInChanConfig *configs, int count)
-    : my_htim_(&htim) {
+bool DevPWMIn::Initialize(const PwmInChanConfig *configs, int count) {
   for (int i = 0; i < count; i++) {
     Register(configs[i]);
   }
-}
-
-int DevPWMIn::Register(const PwmInChanConfig &cfg) {
-  if (channel_count_ >= PWM_IN_MAX_CHANNELS) return -1;
-  PwmChannel &ch    = channels_[channel_count_];
-  ch.htim           = my_htim_;
-  ch.hal_channel    = cfg.hal_channel;
-  ch.gpio_cfg       = cfg;
-  ch.rise_tick      = 0;
-  ch.prev_rise_tick = 0;
-  ch.pulse_us       = 0;
-  ch.period_us      = 0;
-  ch.last_update_ms = 0;
-  ch.expect_rise    = true;
-  ch.valid          = false;
-  return channel_count_++;
-}
-
-bool DevPWMIn::Initialize(void) {
   for (int i = 0; i < channel_count_; i++) {
     PwmChannel &ch = channels_[i];
     // Override path: re-init GPIO via HAL_GPIO_Init before starting IC.
@@ -96,6 +78,22 @@ bool DevPWMIn::Initialize(void) {
     ch.expect_rise = true;
   }
   return true;
+}
+
+int DevPWMIn::Register(const PwmInChanConfig &cfg) {
+  if (channel_count_ >= PWM_IN_MAX_CHANNELS) return -1;
+  PwmChannel &ch    = channels_[channel_count_];
+  ch.htim           = cfg.htim;
+  ch.hal_channel    = cfg.hal_channel;
+  ch.gpio_cfg       = cfg;
+  ch.rise_tick      = 0;
+  ch.prev_rise_tick = 0;
+  ch.pulse_us       = 0;
+  ch.period_us      = 0;
+  ch.last_update_ms = 0;
+  ch.expect_rise    = true;
+  ch.valid          = false;
+  return channel_count_++;
 }
 
 void DevPWMIn::HandleCapture(TIM_HandleTypeDef *htim) {
@@ -150,10 +148,3 @@ bool DevPWMIn::IsFresh(int idx) const {
   if (!ch.valid) return false;
   return (HAL_GetTick() - ch.last_update_ms) < PWM_IN_STALE_MS;
 }
-
-/** HAL input capture callback — dispatches to the capture manager. */
-#if USE_PWM_IN
-extern "C" void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  pwm_dev_in.HandleCapture(htim);
-}
-#endif

@@ -31,25 +31,17 @@ DevLED led1(LED1_GPIO_Port, LED1_Pin);
 // DevADC adc0(&hadc1);
 #if USE_PWM_IN
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
-// Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4) — null port = trust IOC
-// Override example for pin-stacking:
-//   { TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW }
-static const PwmInChanConfig kPwmChannels[] = {
-  { TIM_CHANNEL_1 },  // PA6
-  { TIM_CHANNEL_2 },  // PA4
-  { TIM_CHANNEL_3 },  // PB0
-  { TIM_CHANNEL_4 },  // PB1
-};
-DevPWMIn pwm_dev_in(htim3, kPwmChannels, 4);
+DevPWMIn pwm_dev_in;
 #endif
 #if USE_SBUS
 // SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted
-DevSBus sbus(huart3);
+DevSBus sbus;
 #endif
 #if USE_CPPM
 // CPPM RC receiver input — single-wire PPM sum on one TIM IC pin
 DevCPPM cppm;
 #endif
+
 // WS2812 RGB LED strip driver, using SPI1/2 (PA7/PB15=MOSI)
 DevWS2812 ws2812_1(&hspi1);
 DevWS2812 ws2812_2(&hspi2);
@@ -88,7 +80,17 @@ void main_loop(void) {
   console.Initialize();
   // adc0.Initialize();
 #if USE_PWM_IN
-  pwm_dev_in.Initialize();
+  // Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4) — null port =
+  // trust IOC Override example for pin-stacking:
+  //   { TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL,
+  //   GPIO_SPEED_FREQ_LOW }
+  static const PwmInChanConfig kPwmChannels[] = {
+      {&htim3, TIM_CHANNEL_1},  // PA6
+      {&htim3, TIM_CHANNEL_2},  // PA4
+      {&htim3, TIM_CHANNEL_3},  // PB0
+      {&htim3, TIM_CHANNEL_4},  // PB1
+  };
+  pwm_dev_in.Initialize(kPwmChannels, 4);
 #endif
 #if USE_SBUS
   // Default: IOC/CubeMX already configured the RX GPIO (USART2 → PB4 AF7).
@@ -97,11 +99,10 @@ void main_loop(void) {
   //                                         GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH
   //                                         };
   //   sbus.Initialize(&huart2, &sbus_rx);
-  sbus.Initialize();
+  sbus.Initialize(huart3);
 #endif
 #if USE_CPPM
-  cppm.Register(&htim3, TIM_CHANNEL_1);  // PB4
-  cppm.Initialize();
+  cppm.Initialize(&htim3, TIM_CHANNEL_1);
 #endif
 
   ws2812_1.Initialize();
@@ -208,42 +209,46 @@ void main_loop(void) {
         }
       }
 #endif
+      // Print CPPM status (first 4 channels)
 #if USE_CPPM
       {
-        uint32_t cppm_pulse_us = 0, cppm_period_us = 0;
-        // bool fresh = cppm.IsFresh(0);
-        bool valid = cppm.GetChannel(0, cppm_pulse_us, cppm_period_us);
+        uint32_t pulse_us = 0, period_us = 0;
+        bool fresh = cppm.IsFresh(0);
+        bool valid = cppm.GetChannel(0, pulse_us, period_us);
         int len = 0;
         if (!valid) {
-          len = snprintf((char*)buf, sizeof(buf), "--\t");
-          console.Send((const char*)buf, len);
+          console.Send("CPPM: --\r\n", 10);
         } else {
+          len = snprintf((char*)buf, sizeof(buf), "CPPM: ");
+          console.Send((const char*)buf, len);
           for (int ch = 0; ch < 4; ch++) {
-            valid = cppm.GetChannel(ch, cppm_pulse_us, cppm_period_us);
-            len = snprintf((char*)buf, sizeof(buf), "CPPM%d: %4lu\t", ch + 1,
-                           cppm_pulse_us);
+            fresh = cppm.IsFresh(ch);
+            valid = cppm.GetChannel(ch, pulse_us, period_us);
+            len = snprintf((char*)buf, sizeof(buf), "%d:%c%4lu\t", ch + 1,
+                           fresh ? ' ' : '~', pulse_us);
             console.Send((const char*)buf, len);
           }
           console.Send("\r\n", 2);
         }
       }
-    }
 #endif
+    }
+
+    console.Update();
+    led0.Update();
+    led1.Update();
+
+    ws2812fx_1
+        .service();  // runs WS2812FX effect and fires customShow → ws2812_1
+    ws2812fx_2
+        .service();  // runs WS2812FX effect and fires customShow → ws2812_2
+
+    if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
+      usb_connected = true;
+      // console.Send("USB CDC Connected!" NL, 20);
+      // HAL_Delay(1000);
+      // CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
+      // HAL_Delay(100);
+    }
   }
-
-  console.Update();
-  led0.Update();
-  led1.Update();
-
-  ws2812fx_1.service();  // runs WS2812FX effect and fires customShow → ws2812_1
-  ws2812fx_2.service();  // runs WS2812FX effect and fires customShow → ws2812_2
-
-  if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
-    usb_connected = true;
-    // console.Send("USB CDC Connected!" NL, 20);
-    // HAL_Delay(1000);
-    // CDC_Transmit_FS((uint8_t *)"<<USB CDC Connected>>" NL, 22);
-    // HAL_Delay(100);
-  }
-}
 }

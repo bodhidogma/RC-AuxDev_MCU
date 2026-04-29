@@ -34,7 +34,7 @@ class DevCPPM {
   int  Register(TIM_HandleTypeDef *htim, uint32_t hal_channel);
 
   // Start IC interrupts on all registered inputs.
-  bool Initialize(void);
+  bool Initialize(TIM_HandleTypeDef *htim, uint32_t hal_channel);
 
   // Call from HAL_TIM_IC_CaptureCallback.
   void HandleCapture(TIM_HandleTypeDef *htim);

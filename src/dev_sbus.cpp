@@ -99,11 +99,7 @@ static bool ApplyHardwareBinding(const SBusRxConfig &cfg) {
 // Public API
 // ---------------------------------------------------------------------------
 
-DevSBus::DevSBus(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override)
-  : my_huart_(&huart), rx_override_(rx_override) {
-}
-
-bool DevSBus::Initialize() {
+bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override) {
   rx_index_       = 0;
   valid_          = false;
   last_rx_ms_     = 0;
@@ -112,6 +108,8 @@ bool DevSBus::Initialize() {
   memset(channels_, 0, sizeof(channels_));
   memset(rx_buffer_, 0, sizeof(rx_buffer_));
 
+  my_huart_ = &huart;
+
   // Validate that we have a default mapping for this UART instance.
   if (!ResolveDefaultConfig(my_huart_, rx_config_)) {
     return false;  // unsupported UART — do not arm IT
@@ -119,8 +117,8 @@ bool DevSBus::Initialize() {
 
   // Override path: re-init RX GPIO to caller-supplied pin/AF via HAL_GPIO_Init.
   // Default path: IOC/MspInit already configured the pin — nothing extra needed.
-  if (rx_override_ != nullptr) {
-    rx_config_ = *rx_override_;
+  if (rx_override != nullptr) {
+    rx_config_ = *rx_override;
     if (!ApplyHardwareBinding(rx_config_)) {
       return false;
     }

@@ -43,7 +43,8 @@ int DevCPPM::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
   return channel_count_++;
 }
 
-bool DevCPPM::Initialize(void) {
+bool DevCPPM::Initialize(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
+  Register(htim, hal_channel);
   for (int i = 0; i < channel_count_; i++) {
     CppmInput &inp = inputs_[i];
     __HAL_TIM_SET_CAPTUREPOLARITY(inp.htim, inp.hal_channel,
@@ -113,10 +114,4 @@ bool DevCPPM::IsFresh(int idx) const {
 // HAL callback
 // ---------------------------------------------------------------------------
 
-/** HAL input capture callback — dispatches to the CPPM decoder. */
-#if USE_CPPM
-extern "C" void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  cppm.HandleCapture(htim);
-}
-#endif
 

@@ -21,6 +21,7 @@
 // Set port = nullptr to use the IOC/CubeMX default pin assignment for this channel.
 // Set all fields to override: HAL_GPIO_Init is called during Initialize().
 struct PwmInChanConfig {
+  TIM_HandleTypeDef  *htim;   // ptr to timer handle (required)  
   uint32_t      hal_channel;  // TIM_CHANNEL_1 .. TIM_CHANNEL_4 (required)
   GPIO_TypeDef *port;         // nullptr = use IOC default; non-null = override
   uint16_t      pin;          // e.g. GPIO_PIN_6
@@ -46,14 +47,14 @@ class DevPWMIn {
  public:
   // Construct with timer + channel config array.
   // Constructor calls Register() for each entry; Initialize() activates capture.
-  DevPWMIn(TIM_HandleTypeDef &htim, const PwmInChanConfig *configs, int count);
+  DevPWMIn() {};
+
+  // Apply GPIO overrides (where specified) and start IC interrupts on all registered channels.
+  bool Initialize(const PwmInChanConfig *configs, int count);
 
   // Register a channel manually (e.g. for dynamic or post-construction use).
   // Returns 0-based index, or -1 if full.
   int  Register(const PwmInChanConfig &cfg);
-
-  // Apply GPIO overrides (where specified) and start IC interrupts on all registered channels.
-  bool Initialize(void);
 
   // Call from HAL_TIM_IC_CaptureCallback.
   void HandleCapture(TIM_HandleTypeDef *htim);
@@ -65,7 +66,6 @@ class DevPWMIn {
   bool IsFresh(int idx) const;
 
   int                channel_count_ = 0;
-  TIM_HandleTypeDef *my_htim_       = nullptr;
   PwmChannel         channels_[PWM_IN_MAX_CHANNELS];
 };
 
