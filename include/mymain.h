@@ -43,6 +43,11 @@ extern DMA_HandleTypeDef hdma_spi1_tx;
 }
 #endif
 
+// enable at startup / runtime, but for now just choose 1
+#define USE_PWM_IN 0
+#define USE_SBUS 1
+#define USE_CPPM 0
+
 // arduino like macros
 #define millis() HAL_GetTick()  // get current ms elapsed
 #define delay(x) HAL_Delay(x)   // delay ms

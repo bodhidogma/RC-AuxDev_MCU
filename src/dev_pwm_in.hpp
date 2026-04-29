@@ -9,8 +9,6 @@
 
 #include "mymain.h"
 
-#define USE_PWM_IN 0
-
 #define PWM_IN_MAX_CHANNELS  4
 #define PWM_IN_STALE_MS      100u   // ms without update before channel marked stale
 

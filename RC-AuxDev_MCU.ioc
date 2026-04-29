@@ -176,6 +176,7 @@ PB3.Signal=SYS_JTDO-TRACESWO
 PB4.Locked=true
 PB4.Mode=Asynchronous
 PB4.Signal=USART2_RX
+PB4.Stacked=true
 PB8.Locked=true
 PB8.Mode=I2C
 PB8.Signal=I2C1_SCL

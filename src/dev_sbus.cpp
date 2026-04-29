@@ -14,6 +14,17 @@
  * HandleRx() is called from HAL_UART_RxCpltCallback in stm_console.cpp.
  */
 
+/*
+TODO:
+improve implementation:
+- Unsynced mode: receive 1 byte repeatedly until byte is 0x0F.
+- Synced mode: receive full 25-byte frame into rx_buffer_.
+- Validate header/footer (0x0F, 0x00) and decode.
+- If invalid frame: drop back to unsynced 1-byte hunt mode.
+- On UART error callback: clear error and drop to unsynced mode.
+- and.. switch to DMA+IDLE calls
+*/
+
 #include "dev_sbus.hpp"
 #include <string.h>
 
@@ -36,7 +47,6 @@ bool DevSBus::Initialize(UART_HandleTypeDef *huart) {
 
   // Arm single-byte interrupt receive
 
-  
   HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
   return true;
 }

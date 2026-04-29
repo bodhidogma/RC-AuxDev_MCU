@@ -10,8 +10,6 @@
 
 #include "mymain.h"
 
-#define USE_SBUS 1
-
 #define SBUS_CHANNELS       16u
 #define SBUS_FRAME_LEN      25u
 #define SBUS_STALE_MS       100u   // ms without update before data marked stale

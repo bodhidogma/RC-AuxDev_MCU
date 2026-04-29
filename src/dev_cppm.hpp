@@ -7,8 +7,6 @@
 
 #include "mymain.h"
 
-#define USE_CPPM 0
-
 #define CPPM_MAX_INPUTS       2u    // max registered CPPM input wires
 #define CPPM_MAX_RC_CHANNELS  18u   // max RC channels per CPPM frame
 #define CPPM_SYNC_GAP_US      3000u // gap >= this is treated as frame sync
