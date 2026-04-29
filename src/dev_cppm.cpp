@@ -27,8 +27,8 @@ static inline HAL_TIM_ActiveChannel chan_to_active(uint32_t hal_channel) {
 // ---------------------------------------------------------------------------
 
 int DevCPPM::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
-  if (channel_count_ >= static_cast<int>(CPPM_MAX_INPUTS)) return -1;
-  CppmInput &inp       = inputs_[channel_count_];
+  if (input_count_ >= static_cast<int>(CPPM_MAX_INPUTS)) return -1;
+  CppmInput &inp       = inputs_[input_count_];
   inp.htim             = htim;
   inp.hal_channel      = hal_channel;
   inp.prev_tick        = 0;
@@ -39,13 +39,13 @@ int DevCPPM::Register(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
   inp.num_channels     = 0;
   inp.synced           = false;
   inp.valid            = false;
-  memset(inp.rc_channels, 0, sizeof(inp.rc_channels));
-  return channel_count_++;
+  memset(inp.channels, 0, sizeof(inp.channels));
+  return input_count_++;
 }
 
 bool DevCPPM::Initialize(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
   Register(htim, hal_channel);
-  for (int i = 0; i < channel_count_; i++) {
+  for (int i = 0; i < input_count_; i++) {
     CppmInput &inp = inputs_[i];
     __HAL_TIM_SET_CAPTUREPOLARITY(inp.htim, inp.hal_channel,
                                   TIM_INPUTCHANNELPOLARITY_RISING);
@@ -57,7 +57,7 @@ bool DevCPPM::Initialize(TIM_HandleTypeDef *htim, uint32_t hal_channel) {
 void DevCPPM::HandleCapture(TIM_HandleTypeDef *htim) {
   HAL_TIM_ActiveChannel active = htim->Channel;
 
-  for (int i = 0; i < channel_count_; i++) {
+  for (int i = 0; i < input_count_; i++) {
     CppmInput &inp = inputs_[i];
     if (inp.htim->Instance != htim->Instance) continue;
     if (chan_to_active(inp.hal_channel) != active) continue;
@@ -83,30 +83,28 @@ void DevCPPM::HandleCapture(TIM_HandleTypeDef *htim) {
       inp.synced           = true;
     } else if (inp.synced) {
       // Channel value: store if within bounds
-      if (inp.ch_idx < CPPM_MAX_RC_CHANNELS) {
-        inp.rc_channels[inp.ch_idx++] = gap_us;
+      if (inp.ch_idx < CPPM_CHANNELS) {
+        inp.channels[inp.ch_idx++] = gap_us;
       }
     }
     break;  // Only one active channel per callback invocation
   }
 }
 
-bool DevCPPM::GetChannel(int idx, uint32_t &pulse_us,
-                          uint32_t &period_us) const {
-  if (channel_count_ == 0) return false;
+bool DevCPPM::GetChannels(uint16_t *channels, uint8_t &channel_count, uint16_t &period_us) const {
+  if (input_count_ == 0) return false;
   const CppmInput &inp = inputs_[0];  // use first registered CPPM input
   if (!inp.valid) return false;
-  if (idx < 0 || idx >= static_cast<int>(inp.num_channels)) return false;
-  pulse_us  = inp.rc_channels[idx];
+  memcpy(channels, inp.channels, sizeof(uint16_t) * CPPM_CHANNELS);
+  channel_count = static_cast<int>(inp.num_channels);
   period_us = inp.frame_period_us;
   return true;
 }
 
-bool DevCPPM::IsFresh(int idx) const {
-  if (channel_count_ == 0) return false;
+bool DevCPPM::IsFresh() const {
+  if (input_count_ == 0) return false;
   const CppmInput &inp = inputs_[0];
   if (!inp.valid) return false;
-  if (idx < 0 || idx >= static_cast<int>(inp.num_channels)) return false;
   return (HAL_GetTick() - inp.last_update_ms) < CPPM_STALE_MS;
 }
 

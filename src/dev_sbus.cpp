@@ -160,7 +160,7 @@ void DevSBus::HandleRx(uint8_t byte) {
   HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
 }
 
-bool DevSBus::GetChannels(uint16_t *channels, int &channel_count) const {
+bool DevSBus::GetChannels(uint16_t *channels, uint8_t &channel_count) const {
   if (!valid_) return false;
   memcpy(channels, channels_, sizeof(uint16_t) * SBUS_CHANNELS);
   channel_count = SBUS_CHANNELS;

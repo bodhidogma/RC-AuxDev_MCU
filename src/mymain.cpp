@@ -197,11 +197,11 @@ void main_loop(void) {
         if (!valid) {
           console.Send("SBUS: --\r\n", 10);
         } else {
-          len = snprintf((char*)buf, sizeof(buf), "SBUS:%c ",
-                         (fresh ? ' ' : '~'));
+          len = snprintf((char*)buf, sizeof(buf), "SBUS[%d]:%c ",
+                         sbus_count, (fresh ? ' ' : '~'));
           console.Send((const char*)buf, len);
-          for (int ch = 0; ch < 4; ch++) {
-            len = snprintf((char*)buf, sizeof(buf), "%d: %4u\t", ch + 1,
+          for (int ch = 0; ch < sbus_count; ch++) {
+            len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
                            sbus_ch[ch]);
             console.Send((const char*)buf, len);
           }
@@ -212,20 +212,21 @@ void main_loop(void) {
       // Print CPPM status (first 4 channels)
 #if USE_CPPM
       {
-        uint32_t pulse_us = 0, period_us = 0;
-        bool fresh = cppm.IsFresh(0);
-        bool valid = cppm.GetChannel(0, pulse_us, period_us);
+        uint16_t cppm_ch[CPPM_CHANNELS];
+        uint8_t cppm_count = 0;
+        uint16_t period_us = 0;
+        bool fresh = cppm.IsFresh();
+        bool valid = cppm.GetChannels(cppm_ch, cppm_count, period_us);
         int len = 0;
         if (!valid) {
           console.Send("CPPM: --\r\n", 10);
         } else {
-          len = snprintf((char*)buf, sizeof(buf), "CPPM: ");
+          len = snprintf((char*)buf, sizeof(buf), "CPPM[%d @ %dms]:%c ",
+                         cppm_count, period_us/1000, (fresh ? ' ' : '~'));
           console.Send((const char*)buf, len);
-          for (int ch = 0; ch < 4; ch++) {
-            fresh = cppm.IsFresh(ch);
-            valid = cppm.GetChannel(ch, pulse_us, period_us);
-            len = snprintf((char*)buf, sizeof(buf), "%d:%c%4lu\t", ch + 1,
-                           fresh ? ' ' : '~', pulse_us);
+          for (int ch = 0; ch < cppm_count; ch++) {
+            len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
+                           cppm_ch[ch]);
             console.Send((const char*)buf, len);
           }
           console.Send("\r\n", 2);

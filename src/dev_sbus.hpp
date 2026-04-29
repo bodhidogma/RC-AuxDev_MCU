@@ -55,7 +55,7 @@ class DevSBus {
 
   // Copy latest decoded channel values (SBUS_CHANNELS elements) into `channels`.
   // Returns false if no valid frame has been received yet.
-  bool GetChannels(uint16_t *channels, int &channel_count) const;
+  bool GetChannels(uint16_t *channels, uint8_t &channel_count) const;
 
   // Returns false if no valid frame within SBUS_STALE_MS or not yet valid.
   bool IsFresh(void) const;
