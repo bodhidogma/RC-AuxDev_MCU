@@ -45,6 +45,18 @@ bool DevSBus::Initialize(UART_HandleTypeDef *huart) {
   memset(channels_, 0, sizeof(channels_));
   memset(rx_buffer_, 0, sizeof(rx_buffer_));
 
+  GPIO_TypeDef *rx_port = nullptr;
+  uint16_t rx_pin = 0;
+
+  if (my_huart_ == &huart2) {
+    rx_port = GPIOB;
+    rx_pin = GPIO_PIN_4;
+  }
+  else {
+    // Unsupported UART instance
+    return false;
+  }
+
   // Arm single-byte interrupt receive
 
   HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);

@@ -22,21 +22,23 @@ extern "C" {
 void main_loop();
 
 extern I2C_HandleTypeDef hi2c1;
-
-extern SPI_HandleTypeDef hspi1;
-extern SPI_HandleTypeDef hspi3;
+//extern I2C_HandleTypeDef hi2c2;
 
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
+//extern UART_HandleTypeDef huart3;
 
-extern TIM_HandleTypeDef htim1;
+//extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
-extern TIM_HandleTypeDef htim4;
+//extern TIM_HandleTypeDef htim4;
 
 extern SPI_HandleTypeDef hspi1;
 extern SPI_HandleTypeDef hspi2;
+//extern SPI_HandleTypeDef hspi3;
+
 extern DMA_HandleTypeDef hdma_spi1_tx;
+extern DMA_HandleTypeDef hdma_spi2_tx;
 
 
 #ifdef __cplusplus

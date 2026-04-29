@@ -17,10 +17,10 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 extern DevLED led0;
 extern DevLED led1;
-extern DevSBus sbus;
+//extern DevSBus sbus;
 
 // global uart rx buffer
-static uint8_t uart1_rx_buffer_[1];
+uint8_t uart1_rx_buffer_[1];
 
 /**
  *
@@ -252,27 +252,6 @@ bool StmConsole::update_rx_buffer(uint8_t data) {
   return true;
 }
 
-/** UART RX complete callback
- *
- */
-extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-  // callback is for our UART
-  // if (huart->Instance == USART1) {
-  if (huart == console.MyHuart()) {
-    // console.update_buffer(uart1_rx_buffer_, sizeof(uart1_rx_buffer_));
-    console.update_rx_buffer(uart1_rx_buffer_[0]);
-
-    // re-initiate a rx request
-    HAL_UART_Receive_IT(huart, uart1_rx_buffer_, sizeof(uart1_rx_buffer_));
-    // HAL_UART_Receive_IT(huart, &uart_buffer_, 1);
-    // HAL_UART_Receive_DMA(huart, &uart_buffer_, 1);
-  } else if (huart->Instance == USART2) {
-    // SBUS: HandleRx re-arms IT internally
-#if USE_SBUS
-    sbus.HandleRx(sbus.rx_byte_);
-#endif
-  }
-}
 
 /** UART TX complete callback
  *
