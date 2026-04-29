@@ -43,8 +43,8 @@ static const PwmInChanConfig kPwmChannels[] = {
 DevPWMIn pwm_dev_in(htim3, kPwmChannels, 4);
 #endif
 #if USE_SBUS
-// SBUS RC receiver input — USART2, 100000 baud 8E2, RX-pin inverted
-DevSBus sbus(huart2);
+// SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted
+DevSBus sbus(huart3);
 #endif
 #if USE_CPPM
 // CPPM RC receiver input — single-wire PPM sum on one TIM IC pin

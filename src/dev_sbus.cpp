@@ -50,7 +50,7 @@ static const struct {
   SBusRxConfig       config;
 } kDefaultRxMap[] = {
   { USART2, { GPIOB, GPIO_PIN_4, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH } },
-  // { USART3, { GPIOB, GPIO_PIN_11, GPIO_AF7_USART3, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH } },
+  { USART3, { GPIOB, GPIO_PIN_11, GPIO_AF7_USART3, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH } },
 };
 
 // ---------------------------------------------------------------------------
