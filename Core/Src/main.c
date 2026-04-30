@@ -827,6 +827,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, LED_G_Pin|LED_R_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(O_LAUNCH_TRIG_GPIO_Port, O_LAUNCH_TRIG_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pins : LED_G_Pin LED_R_Pin */
   GPIO_InitStruct.Pin = LED_G_Pin|LED_R_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -834,11 +837,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  /*Configure GPIO pin : I_VBUS_SENS_Pin */
+  GPIO_InitStruct.Pin = I_VBUS_SENS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(I_VBUS_SENS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA4 PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_8;
@@ -846,10 +849,21 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB0 PB1 PB2 PB12
-                           PB14 PB4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_12
-                          |GPIO_PIN_14|GPIO_PIN_4;
+  /*Configure GPIO pins : I_BUTTON_Pin I_JMP_SAFETY_Pin */
+  GPIO_InitStruct.Pin = I_BUTTON_Pin|I_JMP_SAFETY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : O_LAUNCH_TRIG_Pin */
+  GPIO_InitStruct.Pin = O_LAUNCH_TRIG_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(O_LAUNCH_TRIG_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB12 PB14 PB4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_14|GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);

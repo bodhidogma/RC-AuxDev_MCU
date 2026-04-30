@@ -1,25 +1,16 @@
 /* SBUS RC receiver input driver.
  *
- * USART2 config (set by CubeMX): 100000 baud, 8E2, RX-only, RX pin inverted.
- * Protocol: 25-byte frame @ ~7 ms interval.
- *   byte[ 0]    = 0x0F  (header)
- *   bytes[1-22] = 22 bytes carrying 16 × 11-bit channel values (LSB first)
- *   byte[23]    = flags (ch17, ch18, frame-lost, failsafe)
- *   byte[24]    = 0x00  (footer)
+ * IOC/CubeMX requirements:
+ * - Configure USART2 for SBUS: 100000 baud, 8E2, RX enabled.
+ * - Enable RX pin inversion (required for standard inverted SBUS receivers).
+ * - Configure RX GPIO as USART alternate-function input.
+ * - Keep UART/pin mapping aligned with kDefaultRxMap below unless using override.
  *
- * Frame sync strategy: inter-frame gap > SBUS_GAP_RESET_MS (4 ms) resets
- * the accumulator, so the next 0x0F byte starts a fresh frame.
- *
- * Single-byte interrupt-driven receive (matches stm_console pattern).
- * HandleRx() is called from HAL_UART_RxCpltCallback in stm_callbacks.cpp.
- *
- * Hardware binding:
- *   Default path  — IOC/CubeMX already configured the RX GPIO; Initialize()
- *                   validates the UART instance and arms HAL_UART_Receive_IT.
- *   Override path — caller passes a non-null SBusRxConfig; Initialize() calls
- *                   HAL_GPIO_Init to re-map the RX pin before arming IT.
- *                   Useful when pin-stacking prevents CubeMX from configuring
- *                   the desired pin assignment in the .ioc file.
+ * Implementation notes:
+ * - Receives one byte at a time via HAL_UART_Receive_IT.
+ * - 25-byte frames are accepted only with header 0x0F and footer 0x00.
+ * - Unpacks 16 channels x 11-bit (bytes 1..22) and stores flags from byte 23.
+ * - Uses inter-frame gap timing to resync frame assembly.
  */
 
 /*
@@ -34,6 +25,7 @@ improve implementation:
 */
 
 #include "dev_sbus.hpp"
+#include "stm_hal_shims.hpp"
 #include <string.h>
 
 // Forward declaration — global instance defined in mymain.cpp
@@ -56,19 +48,6 @@ static const struct {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-// Enable the AHB peripheral clock for the given GPIO port.
-// Uses HAL RCC helper macros — idempotent if clock is already enabled.
-static bool EnableGpioClock(GPIO_TypeDef *port) {
-  if      (port == GPIOA) { __HAL_RCC_GPIOA_CLK_ENABLE(); }
-  else if (port == GPIOB) { __HAL_RCC_GPIOB_CLK_ENABLE(); }
-  else if (port == GPIOC) { __HAL_RCC_GPIOC_CLK_ENABLE(); }
-  else if (port == GPIOD) { __HAL_RCC_GPIOD_CLK_ENABLE(); }
-  else if (port == GPIOE) { __HAL_RCC_GPIOE_CLK_ENABLE(); }
-  else if (port == GPIOF) { __HAL_RCC_GPIOF_CLK_ENABLE(); }
-  else { return false; }
-  return true;
-}
-
 // Look up the default RX config for a given UART handle.
 static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
   for (const auto &entry : kDefaultRxMap) {
@@ -78,20 +57,6 @@ static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
     }
   }
   return false;  // unsupported UART instance
-}
-
-// Apply GPIO binding for the RX pin using HAL_GPIO_Init.
-// Called only when an override is provided; the default IOC config is left as-is.
-static bool ApplyHardwareBinding(const SBusRxConfig &cfg) {
-  if (!EnableGpioClock(cfg.port)) return false;
-  GPIO_InitTypeDef gpio = {};
-  gpio.Pin       = cfg.pin;
-  gpio.Mode      = GPIO_MODE_AF_PP;
-  gpio.Pull      = cfg.pull;
-  gpio.Speed     = cfg.speed;
-  gpio.Alternate = cfg.alternate;
-  HAL_GPIO_Init(cfg.port, &gpio);
-  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +83,9 @@ bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_overr
   // Default path: IOC/MspInit already configured the pin — nothing extra needed.
   if (rx_override != nullptr) {
     rx_config_ = *rx_override;
-    if (!ApplyHardwareBinding(rx_config_)) {
+    if (!StmHalInitGpioAf(rx_config_.port, rx_config_.pin,
+                          rx_config_.alternate, rx_config_.pull,
+                          rx_config_.speed)) {
       return false;
     }
   }

@@ -1,22 +1,19 @@
-/* RC PWM multi-channel input capture via TIM3.
- * 
- * GPIO pins are shared between PWM IN / OUT (read RC input or drive RC output)
+/* RC PWM multi-channel input capture.
  *
- * TIM3 config: prescaler=71, 1 MHz tick (1 tick = 1 us).
- * Default channels (IOC/CubeMX config): PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
- * Each channel uses independent edge-toggling capture:
- *   rising  -> record timestamp, switch to falling
- *   falling -> compute pulse_us, switch back to rising
- * Period measured rise-to-rise.
+ * IOC/CubeMX requirements:
+ * - Enable TIM3 input-capture channels used for RC input.
+ * - Set timer tick to 1 MHz (1 tick = 1 us).
+ * - Configure corresponding GPIO pins as TIM3 alternate-function inputs.
+ * - Default pin map expected by this module: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4).
  *
- * Hardware binding:
- *   Default path  — port == nullptr in PwmInChanConfig; IOC/MspInit already
- *                   configured the GPIO; Initialize() skips GPIO init for that channel.
- *   Override path — port != nullptr; Initialize() calls HAL_GPIO_Init before
- *                   HAL_TIM_IC_Start_IT for that channel.
+ * Implementation notes:
+ * - Pins can be overridden in code; if no override is provided, IOC GPIO setup is used.
+ * - ISR toggles rising/falling polarity per channel.
+ * - Rising edge stores timestamp and period (rise-to-rise); falling edge stores pulse width.
  */
 
 #include "dev_pwm_in.hpp"
+#include "stm_hal_shims.hpp"
 
 // Reference to the global instance defined in mymain.cpp
 extern DevPWMIn pwm_dev_in;
@@ -25,36 +22,6 @@ extern DevPWMIn pwm_dev_in;
 // TIM_CHANNEL_1=0, CH2=4, CH3=8, CH4=12 -> shift right by 2, then use as bit index
 static inline HAL_TIM_ActiveChannel chan_to_active(uint32_t hal_channel) {
   return static_cast<HAL_TIM_ActiveChannel>(1u << (hal_channel >> 2u));
-}
-
-// ---------------------------------------------------------------------------
-// GPIO helpers
-// ---------------------------------------------------------------------------
-
-// Enable the AHB peripheral clock for the given GPIO port.
-// Uses HAL RCC helper macros — idempotent if clock is already enabled.
-static bool EnableGpioClock(GPIO_TypeDef *port) {
-  if      (port == GPIOA) { __HAL_RCC_GPIOA_CLK_ENABLE(); }
-  else if (port == GPIOB) { __HAL_RCC_GPIOB_CLK_ENABLE(); }
-  else if (port == GPIOC) { __HAL_RCC_GPIOC_CLK_ENABLE(); }
-  else if (port == GPIOD) { __HAL_RCC_GPIOD_CLK_ENABLE(); }
-  else if (port == GPIOE) { __HAL_RCC_GPIOE_CLK_ENABLE(); }
-  else if (port == GPIOF) { __HAL_RCC_GPIOF_CLK_ENABLE(); }
-  else { return false; }
-  return true;
-}
-
-// Apply GPIO override for one channel using HAL_GPIO_Init.
-static bool ApplyChannelGpio(const PwmInChanConfig &cfg) {
-  if (!EnableGpioClock(cfg.port)) return false;
-  GPIO_InitTypeDef gpio = {};
-  gpio.Pin       = cfg.pin;
-  gpio.Mode      = GPIO_MODE_AF_PP;
-  gpio.Pull      = cfg.pull;
-  gpio.Speed     = cfg.speed;
-  gpio.Alternate = cfg.alternate;
-  HAL_GPIO_Init(cfg.port, &gpio);
-  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +37,9 @@ bool DevPWMIn::Initialize(const PwmInChanConfig *configs, int count) {
     // Override path: re-init GPIO via HAL_GPIO_Init before starting IC.
     // Default path (port == nullptr): IOC/MspInit already configured the pin.
     if (ch.gpio_cfg.port != nullptr) {
-      if (!ApplyChannelGpio(ch.gpio_cfg)) return false;
+      if (!StmHalInitGpioAf(ch.gpio_cfg.port, ch.gpio_cfg.pin,
+                             ch.gpio_cfg.alternate, ch.gpio_cfg.pull,
+                             ch.gpio_cfg.speed)) return false;
     }
     __HAL_TIM_SET_CAPTUREPOLARITY(ch.htim, ch.hal_channel,
                                   TIM_INPUTCHANNELPOLARITY_RISING);

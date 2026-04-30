@@ -1,17 +1,20 @@
 /* CPPM (PPM Sum) RC receiver input capture driver.
  *
- * CPPM encodes multiple RC channels on a single wire as a series of pulses.
- * The gap between consecutive rising edges encodes each channel:
- *   gap >= CPPM_SYNC_GAP_US (3000 µs) : frame sync — next gap = CH1
- *   gap  < CPPM_SYNC_GAP_US           : RC channel value in µs (1000–2000 µs)
+ * IOC/CubeMX requirements:
+ * - Enable timer input capture with 1 MHz timer tick (1 tick = 1 us).
+ * - Capture polarity: rising edge.
+ * - Configure GPIO as timer alternate-function input for each used channel.
+ * - Keep pin mapping aligned with kDefaultInputMap below unless using overrides.
  *
- * Timer config: prescaler must yield 1 MHz tick (1 tick = 1 µs), e.g.
- *   APB clock 72 MHz → prescaler = 71.
- * Capture is triggered on every rising edge.
- * Up to CPPM_MAX_INPUTS separate CPPM wires may be registered.
+ * Implementation notes:
+ * - Gap >= CPPM_SYNC_GAP_US marks frame sync.
+ * - Gap <  CPPM_SYNC_GAP_US is interpreted as channel pulse width in us.
+ * - On each sync gap, any collected channels are latched as one frame.
+ * - GetChannels()/IsFresh() report data from the first registered CPPM input.
  */
 
 #include "dev_cppm.hpp"
+#include "stm_hal_shims.hpp"
 #include <string.h>
 
 // Forward declaration — global instance defined in mymain.cpp
@@ -42,25 +45,6 @@ static const struct {
 		 {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
-static bool EnableGpioClock(GPIO_TypeDef* port) {
-  if (port == GPIOA) {
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-  } else if (port == GPIOB) {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-  } else if (port == GPIOC) {
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-  } else if (port == GPIOD) {
-    __HAL_RCC_GPIOD_CLK_ENABLE();
-  } else if (port == GPIOE) {
-    __HAL_RCC_GPIOE_CLK_ENABLE();
-  } else if (port == GPIOF) {
-    __HAL_RCC_GPIOF_CLK_ENABLE();
-  } else {
-    return false;
-  }
-  return true;
-}
-
 static bool ResolveDefaultInputConfig(TIM_HandleTypeDef* htim,
                                       uint32_t hal_channel,
                                       CppmGpioConfig& out) {
@@ -71,18 +55,6 @@ static bool ResolveDefaultInputConfig(TIM_HandleTypeDef* htim,
     }
   }
   return false;
-}
-
-static bool ApplyGpioOverride(const CppmGpioConfig& cfg) {
-  if (!EnableGpioClock(cfg.port)) return false;
-  GPIO_InitTypeDef gpio = {};
-  gpio.Pin = cfg.pin;
-  gpio.Mode = GPIO_MODE_AF_PP;
-  gpio.Pull = cfg.pull;
-  gpio.Speed = cfg.speed;
-  gpio.Alternate = cfg.alternate;
-  HAL_GPIO_Init(cfg.port, &gpio);
-  return true;
 }
 
 static bool ConfigureTimerInputCapture(TIM_HandleTypeDef* htim,
@@ -144,7 +116,9 @@ bool DevCPPM::Initialize(const CppmInputConfig* configs, int count) {
     }
 
     if (inp.use_gpio_override) {
-      if (!ApplyGpioOverride(inp.gpio_cfg)) return false;
+      if (!StmHalInitGpioAf(inp.gpio_cfg.port, inp.gpio_cfg.pin,
+                             inp.gpio_cfg.alternate, inp.gpio_cfg.pull,
+                             inp.gpio_cfg.speed)) return false;
     }
 
     if (!ConfigureTimerInputCapture(inp.htim, inp.hal_channel)) return false;

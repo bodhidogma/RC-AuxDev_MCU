@@ -1,4 +1,19 @@
+/* RC PWM multi-channel output driver.
+ *
+ * IOC/CubeMX requirements:
+ * - Enable TIM2 PWM outputs for channels in use.
+ * - Set timer base to 1 MHz tick (1 tick = 1 us).
+ * - Configure GPIO pins as TIM2 alternate-function outputs.
+ * - Keep pin mapping aligned with kDefaultOutputMap below unless using overrides.
+ *
+ * Implementation notes:
+ * - Pulse values are clamped to PWM_OUT_PULSE_US_MIN..PWM_OUT_PULSE_US_MAX.
+ * - Pulse is also constrained to stay below the configured period boundary.
+ * - Typical RC output period is 20000 us (50 Hz), configured at Initialize().
+ */
+
 #include "dev_pwm_out.hpp"
+#include "stm_hal_shims.hpp"
 
 // Default output map for IOC/CubeMX TIM2 pins in this project.
 static const struct {
@@ -16,25 +31,6 @@ static const struct {
 		 {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
-static bool EnableGpioClock(GPIO_TypeDef *port) {
-	if (port == GPIOA) {
-		__HAL_RCC_GPIOA_CLK_ENABLE();
-	} else if (port == GPIOB) {
-		__HAL_RCC_GPIOB_CLK_ENABLE();
-	} else if (port == GPIOC) {
-		__HAL_RCC_GPIOC_CLK_ENABLE();
-	} else if (port == GPIOD) {
-		__HAL_RCC_GPIOD_CLK_ENABLE();
-	} else if (port == GPIOE) {
-		__HAL_RCC_GPIOE_CLK_ENABLE();
-	} else if (port == GPIOF) {
-		__HAL_RCC_GPIOF_CLK_ENABLE();
-	} else {
-		return false;
-	}
-	return true;
-}
-
 static bool ResolveDefaultOutputConfig(TIM_HandleTypeDef *htim,
 																			 uint32_t hal_channel,
 																			 PwmOutGpioConfig &out) {
@@ -45,19 +41,6 @@ static bool ResolveDefaultOutputConfig(TIM_HandleTypeDef *htim,
 		}
 	}
 	return false;
-}
-
-static bool ApplyChannelGpio(const PwmOutGpioConfig &cfg) {
-	if (!EnableGpioClock(cfg.port)) return false;
-
-	GPIO_InitTypeDef gpio = {};
-	gpio.Pin = cfg.pin;
-	gpio.Mode = GPIO_MODE_AF_PP;
-	gpio.Pull = cfg.pull;
-	gpio.Speed = cfg.speed;
-	gpio.Alternate = cfg.alternate;
-	HAL_GPIO_Init(cfg.port, &gpio);
-	return true;
 }
 
 static bool IsValidHalChannel(uint32_t hal_channel) {
@@ -128,7 +111,9 @@ bool DevPWMOut::Initialize(const PwmOutChanConfig *configs, int count,
 		}
 
 		if (ch.use_gpio_override) {
-			if (!ApplyChannelGpio(ch.gpio_cfg)) return false;
+			if (!StmHalInitGpioAf(ch.gpio_cfg.port, ch.gpio_cfg.pin,
+			                      ch.gpio_cfg.alternate, ch.gpio_cfg.pull,
+			                      ch.gpio_cfg.speed)) return false;
 		}
 
 		bool needs_timer_init = true;

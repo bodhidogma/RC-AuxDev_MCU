@@ -6,10 +6,39 @@
 // #include <cstring>
 
 // #include "mymain.h"
+#include "stm_hal_shims.hpp"
 #include "dev_cppm.hpp"
 #include "dev_pwm_in.hpp"
 #include "dev_sbus.hpp"
 #include "stm_console.hpp"
+
+// ---------------------------------------------------------------------------
+// Shared GPIO helpers
+// ---------------------------------------------------------------------------
+
+bool StmHalEnableGpioClock(GPIO_TypeDef *port) {
+  if      (port == GPIOA) { __HAL_RCC_GPIOA_CLK_ENABLE(); }
+  else if (port == GPIOB) { __HAL_RCC_GPIOB_CLK_ENABLE(); }
+  else if (port == GPIOC) { __HAL_RCC_GPIOC_CLK_ENABLE(); }
+  else if (port == GPIOD) { __HAL_RCC_GPIOD_CLK_ENABLE(); }
+  else if (port == GPIOE) { __HAL_RCC_GPIOE_CLK_ENABLE(); }
+  else if (port == GPIOF) { __HAL_RCC_GPIOF_CLK_ENABLE(); }
+  else { return false; }
+  return true;
+}
+
+bool StmHalInitGpioAf(GPIO_TypeDef *port, uint16_t pin,
+                      uint32_t alternate, uint32_t pull, uint32_t speed) {
+  if (!StmHalEnableGpioClock(port)) return false;
+  GPIO_InitTypeDef gpio = {};
+  gpio.Pin       = pin;
+  gpio.Mode      = GPIO_MODE_AF_PP;
+  gpio.Pull      = pull;
+  gpio.Speed     = speed;
+  gpio.Alternate = alternate;
+  HAL_GPIO_Init(port, &gpio);
+  return true;
+}
 
 extern uint8_t console_uart_rx_buffer_[1];
 extern DevSBus sbus;

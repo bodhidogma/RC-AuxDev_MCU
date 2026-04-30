@@ -1,6 +1,16 @@
-/* WS2812 LED driver using SPI MOSI + DMA
- * Uses 3-bit SPI encoding: WS2812 '1' = 0b110, '0' = 0b100
- * SPI clock: 2.25 MHz (72MHz/32) generates ~750kHz WS2812 data rate
+/* WS2812 LED driver using SPI MOSI + DMA.
+ *
+ * IOC/CubeMX requirements:
+ * - Enable selected SPI peripheral in master TX mode (MOSI required, MISO optional).
+ * - Set SPI baud prescaler so bitstream is near WS2812 timing (project uses 2.25 MHz).
+ * - Enable DMA for SPI TX and NVIC IRQ for DMA transfer-complete callbacks.
+ * - Configure MOSI GPIO as SPI alternate-function output.
+ *
+ * Implementation notes:
+ * - Encoding used here: WS2812 '1' = 0b110, '0' = 0b100 (3 SPI bits per LED bit).
+ * - Uses a precomputed 256x3 lookup table to expand each color byte.
+ * - Send() builds one SPI frame per LED update and transmits it via HAL_SPI_Transmit_DMA.
+ * - dma_busy_ is cleared from SPI TX complete/error callbacks.
  */
 
 #include "dev_ws2812.hpp"
