@@ -1,19 +1,19 @@
 #include "dev_pwm_out.hpp"
 
-// Default output map for IOC/CubeMX TIM3 pins in this project.
+// Default output map for IOC/CubeMX TIM2 pins in this project.
 static const struct {
 	TIM_TypeDef *tim_instance;
 	uint32_t hal_channel;
 	PwmOutGpioConfig gpio;
 } kDefaultOutputMap[] = {
-		{TIM3, TIM_CHANNEL_1,
-		 {GPIOA, GPIO_PIN_6, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM3, TIM_CHANNEL_2,
-		 {GPIOA, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM3, TIM_CHANNEL_3,
-		 {GPIOB, GPIO_PIN_0, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM3, TIM_CHANNEL_4,
-		 {GPIOB, GPIO_PIN_1, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_1,
+		 {GPIOA, GPIO_PIN_15, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_2,
+		 {GPIOA, GPIO_PIN_1, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_3,
+		 {GPIOB, GPIO_PIN_10, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_4,
+		 {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
 static bool EnableGpioClock(GPIO_TypeDef *port) {

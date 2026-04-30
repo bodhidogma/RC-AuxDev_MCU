@@ -21,25 +21,30 @@ extern "C" {
  */
 void main_loop();
 
-extern I2C_HandleTypeDef hi2c1;
+//extern ADC_HandleTypeDef hadc1;
+
+//extern CRC_HandleTypeDef hcrc;
+
+//extern I2C_HandleTypeDef hi2c1;
 //extern I2C_HandleTypeDef hi2c2;
 
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
-extern UART_HandleTypeDef huart3;
+//extern RTC_HandleTypeDef hrtc;
 
-//extern TIM_HandleTypeDef htim1;
-extern TIM_HandleTypeDef htim2;
-extern TIM_HandleTypeDef htim3;
-extern TIM_HandleTypeDef htim4;
-
-extern SPI_HandleTypeDef hspi1;
+//extern SPI_HandleTypeDef hspi1;
 extern SPI_HandleTypeDef hspi2;
-//extern SPI_HandleTypeDef hspi3;
+extern SPI_HandleTypeDef hspi3;
 
 extern DMA_HandleTypeDef hdma_spi1_tx;
 extern DMA_HandleTypeDef hdma_spi2_tx;
 
+//extern TIM_HandleTypeDef htim1;
+extern TIM_HandleTypeDef htim2;
+//extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim15;
+
+extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
+//extern UART_HandleTypeDef huart3;
 
 #ifdef __cplusplus
 }
@@ -54,6 +59,7 @@ extern DMA_HandleTypeDef hdma_spi2_tx;
 #if !USE_SBUS
 #define USE_CPPM 1
 #endif
+#define USE_WS2812 1
 
 // arduino like macros
 #define millis() HAL_GetTick()  // get current ms elapsed

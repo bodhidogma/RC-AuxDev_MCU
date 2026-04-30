@@ -28,8 +28,8 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 StmConsole console(&huart1, false);
 // StmConsole console(NULL, true);
 
-DevLED led0(LED0_GPIO_Port, LED0_Pin);
-DevLED led1(LED1_GPIO_Port, LED1_Pin);
+DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
+DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
 
 // DevADC adc0(&hadc1);
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
@@ -42,8 +42,8 @@ DevCPPM cppm;
 DevPWMOut pwm_dev_out;
 
 // WS2812 RGB LED strip driver, using SPI1/2 (PA7/PB15=MOSI)
-DevWS2812 ws2812_1(&hspi1);
-DevWS2812 ws2812_2(&hspi2);
+DevWS2812 ws2812_1(&hspi2);
+DevWS2812 ws2812_2(&hspi3);
 
 // WS2812FX effects engine — drives ws2812_1 via customShow callback
 // pin=0 and type=0 are unused (DevWS2812 owns the hardware)
@@ -79,45 +79,39 @@ void main_loop(void) {
   console.Initialize();
   // adc0.Initialize();
 #if USE_PWM_IN
-  // Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4) — null port =
-  // trust IOC Override example for pin-stacking:
-  //   { TIM_CHANNEL_1, GPIOB, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL,
-  //   GPIO_SPEED_FREQ_LOW }
   static const PwmInChanConfig kPwmInChannels[] = {
-      {&htim3, TIM_CHANNEL_1},  // PA6
-      {&htim3, TIM_CHANNEL_2},  // PA4
-      {&htim3, TIM_CHANNEL_3},  // PB0
-      {&htim3, TIM_CHANNEL_4},  // PB1
+      {&htim2, TIM_CHANNEL_1},
+      {&htim2, TIM_CHANNEL_2},
+      {&htim2, TIM_CHANNEL_3},
+      {&htim2, TIM_CHANNEL_4},
   };
   pwm_dev_in.Initialize(kPwmInChannels, 4);
 #elif USE_PWM_OUT
-  // Default IOC pins: PA6(CH1), PA4(CH2), PB0(CH3), PB1(CH4)
   static const PwmOutChanConfig kPwmOutChannels[] = {
-      {&htim3, TIM_CHANNEL_1},  // PA6
-      {&htim3, TIM_CHANNEL_2},  // PA4
-      {&htim3, TIM_CHANNEL_3},  // PB0
-      {&htim3, TIM_CHANNEL_4},  // PB1
+      {&htim2, TIM_CHANNEL_1},
+      {&htim2, TIM_CHANNEL_2},
+      {&htim2, TIM_CHANNEL_3},
+      {&htim2, TIM_CHANNEL_4},
   };
   pwm_dev_out.Initialize(kPwmOutChannels, 4);
 #endif
 #if USE_SBUS
   // Default: IOC/CubeMX already configured the RX GPIO for USART3 on PB11.
   // If PB11 is assigned to CPPM, SBUS must remain disabled at boot.
-  sbus.Initialize(huart3);
+  sbus.Initialize(huart2);
 #elif USE_CPPM
-  // Default CPPM target on shared PB11: TIM2_CH4.
+  // Default CPPM target on shared PA3: TIM15_CH2.
   // Non-null port means runtime override is applied by DevCPPM.
-  // TIM2_CH4 on PB11 (shared stack with USART3_RX).
-  // GPIO must be configured explicitly — TIM2 MSP only sets up clock + IRQ,
-  // no pin config. Override applies PB11 as AF1 (TIM2_CH4) input.
+  // GPIO must be configured explicitly — TIM15 MSP only sets up clock + IRQ,
   static const CppmInputConfig kCppmConfig = {
-      &htim2,
-      TIM_CHANNEL_4,
-      {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}};
+      &htim15,
+      TIM_CHANNEL_2,
+      {GPIOA, GPIO_PIN_3, GPIO_AF9_TIM15, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}};
   cppm.Initialize(&kCppmConfig, 1);
-  // cppm.Initialize(&htim3, TIM_CHANNEL_1);  // alternative: PA6 = TIM3_CH1
+  //cppm.Initialize(&htim2, TIM_CHANNEL_4);
 #endif
 
+#if USE_WS2812
   ws2812_1.Initialize();
   ws2812_2.Initialize();
 
@@ -138,8 +132,10 @@ void main_loop(void) {
   ws2812fx_1.setSpeed(0, 1000);
   ws2812fx_1.setMode(0, led_mode);
   ws2812fx_2.setSpeed(0, 1000);
-  ws2812fx_2.setMode(0, led_mode++);
+  ws2812fx_2.setMode(0, led_mode);
   ws2812fx_2.setOptions(0, REVERSE);
+  led_mode++;
+#endif
 
   led0.SetPattern(DevLED::BLINK1);
   led1.SetPattern(DevLED::BLINK3);
@@ -161,9 +157,11 @@ void main_loop(void) {
         snprintf((char*)buf, sizeof(buf), "led_mode: %d\r\n", led_mode);
         console.Send((const char*)buf, strlen((const char*)buf));
 
+#if USE_WS2812        
         ws2812fx_1.setMode(0, led_mode);
-        ws2812fx_2.setMode(0, led_mode++);
-
+        ws2812fx_2.setMode(0, led_mode);
+        led_mode++;
+#endif
         if (led_mode > FX_MODE_RAIN) {
           led_mode = 0;
         }
@@ -246,7 +244,7 @@ void main_loop(void) {
       // pwm = 1000 + (sbus - 172) * (2000-1000) / (1811-172)
       // pwm = 1000 + (sbus - 172) * 0.61012
       servo_pos =
-          1000 + (uint16_t)((sbus_ch[2] - 172) * 0.61012);  // #3 == elev
+          1000 + (uint16_t)((sbus_ch[0] - 172) * 0.61012);  // #1 == thr
     }
 #elif USE_CPPM
     uint16_t cppm_ch[CPPM_CHANNELS];
@@ -256,11 +254,11 @@ void main_loop(void) {
     valid = cppm.GetChannels(cppm_ch, cppm_count, period_us);
     if (valid && fresh) {
       // Example: map first CPPM channel to a servo PWM output
-      servo_pos = cppm_ch[1];  // #1 == elevator
+      servo_pos = cppm_ch[2];  // #3 == thr
     }
 #endif
     if (servo_pos) {
-      pwm_dev_out.SetPulseUs(3, servo_pos);
+      pwm_dev_out.SetPulseUs(USE_PWM_OUT-1, servo_pos);
     }
 #endif
 
@@ -268,10 +266,11 @@ void main_loop(void) {
     led0.Update();
     led1.Update();
 
-    ws2812fx_1
-        .service();  // runs WS2812FX effect and fires customShow → ws2812_1
-    ws2812fx_2
-        .service();  // runs WS2812FX effect and fires customShow → ws2812_2
+    // runs WS2812FX effect and fires customShow → ws2812_1
+#if USE_WS2812    
+    ws2812fx_1.service();
+    ws2812fx_2.service();
+#endif
 
     if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
       usb_connected = true;

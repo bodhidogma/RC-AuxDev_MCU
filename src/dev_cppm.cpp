@@ -31,18 +31,15 @@ static const struct {
   uint32_t hal_channel;
   CppmGpioConfig gpio;
 } kDefaultInputMap[] = {
-    // IOC TIM3 input-capture defaults
-    {TIM3, TIM_CHANNEL_1,
-     {GPIOA, GPIO_PIN_6, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-    {TIM3, TIM_CHANNEL_2,
-     {GPIOA, GPIO_PIN_4, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-    {TIM3, TIM_CHANNEL_3,
-     {GPIOB, GPIO_PIN_0, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-    {TIM3, TIM_CHANNEL_4,
-     {GPIOB, GPIO_PIN_1, GPIO_AF2_TIM3, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-    // Shared-stack option with USART3 RX on PB11
-    {TIM2, TIM_CHANNEL_4,
-     {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}},
+    // IOC TIM2 input-capture defaults
+		{TIM2, TIM_CHANNEL_1,
+		 {GPIOA, GPIO_PIN_15, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_2,
+		 {GPIOA, GPIO_PIN_1, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_3,
+		 {GPIOB, GPIO_PIN_10, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+		{TIM2, TIM_CHANNEL_4,
+		 {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
 static bool EnableGpioClock(GPIO_TypeDef* port) {
@@ -137,10 +134,13 @@ bool DevCPPM::Initialize(const CppmInputConfig* configs, int count) {
   for (int i = 0; i < input_count_; i++) {
     CppmInput &inp = inputs_[i];
 
-    // Validate mapping against known defaults even when override is used.
-    CppmGpioConfig default_cfg = {};
-    if (!ResolveDefaultInputConfig(inp.htim, inp.hal_channel, default_cfg)) {
-      return false;
+    // Default path requires a known IOC mapping.
+    // Override path is allowed to bind pins not present in default map.
+    if (!inp.use_gpio_override) {
+      CppmGpioConfig default_cfg = {};
+      if (!ResolveDefaultInputConfig(inp.htim, inp.hal_channel, default_cfg)) {
+        return false;
+      }
     }
 
     if (inp.use_gpio_override) {

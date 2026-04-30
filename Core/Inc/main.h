@@ -59,30 +59,16 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LED_G_Pin GPIO_PIN_13
 #define LED_G_GPIO_Port GPIOC
+#define LED_R_Pin GPIO_PIN_14
+#define LED_R_GPIO_Port GPIOC
 #define A11_IGNITER_SENS_Pin GPIO_PIN_0
 #define A11_IGNITER_SENS_GPIO_Port GPIOA
-#define LED_R_Pin GPIO_PIN_3
-#define LED_R_GPIO_Port GPIOA
-#define T3_PWM_CH2_Pin GPIO_PIN_4
-#define T3_PWM_CH2_GPIO_Port GPIOA
-#define _spi1_sck_Pin GPIO_PIN_5
-#define _spi1_sck_GPIO_Port GPIOA
-#define T3_PWM_CH1_Pin GPIO_PIN_6
-#define T3_PWM_CH1_GPIO_Port GPIOA
-#define WS2812_CH1_Pin GPIO_PIN_7
-#define WS2812_CH1_GPIO_Port GPIOA
-#define T3_PWM_CH3_Pin GPIO_PIN_0
-#define T3_PWM_CH3_GPIO_Port GPIOB
-#define T3_PWM_CH4_Pin GPIO_PIN_1
-#define T3_PWM_CH4_GPIO_Port GPIOB
-#define _usart3_tx_Pin GPIO_PIN_10
-#define _usart3_tx_GPIO_Port GPIOB
-#define U3T2_SBUS_CPPM_Pin GPIO_PIN_11
-#define U3T2_SBUS_CPPM_GPIO_Port GPIOB
 #define _spi2_sck_Pin GPIO_PIN_13
 #define _spi2_sck_GPIO_Port GPIOB
-#define WS2812_CH2_Pin GPIO_PIN_15
-#define WS2812_CH2_GPIO_Port GPIOB
+#define S2_WS2812_CH1_Pin GPIO_PIN_15
+#define S2_WS2812_CH1_GPIO_Port GPIOB
+#define S3_WS2812_CH2_Pin GPIO_PIN_5
+#define S3_WS2812_CH2_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
