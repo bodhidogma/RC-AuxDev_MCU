@@ -51,7 +51,7 @@ extern DevPWMIn pwm_dev_in;
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
 #if USE_SBUS
   if (huart == sbus.MyHuart()) {
-    // SBUS: HandleRx re-arms IT internally
+    // SBUS IT fallback path: HandleRx re-arms IT internally.
     sbus.HandleRx(sbus.rx_byte_);
   } else
 #endif
@@ -63,6 +63,28 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
     // HAL_UART_Receive_IT(huart, &uart_buffer_, 1);
     // HAL_UART_Receive_DMA(huart, &uart_buffer_, 1);
   }
+}
+
+extern "C" void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size) {
+#if USE_SBUS
+  if (huart == sbus.MyHuart()) {
+    sbus.HandleRxEvent(size);
+  }
+#else
+  (void)huart;
+  (void)size;
+#endif
+}
+
+extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+#if USE_SBUS
+  if (huart == sbus.MyHuart()) {
+    sbus.HandleError();
+    return;
+  }
+#else
+  (void)huart;
+#endif
 }
 
 /** HAL input capture callback — dispatches to the appropriate decoder.

@@ -7,22 +7,11 @@
  * - Keep UART/pin mapping aligned with kDefaultRxMap below unless using override.
  *
  * Implementation notes:
- * - Receives one byte at a time via HAL_UART_Receive_IT.
+ * - Uses HAL_UARTEx_ReceiveToIdle_DMA when available; falls back to IT RX.
  * - 25-byte frames are accepted only with header 0x0F and footer 0x00.
  * - Unpacks 16 channels x 11-bit (bytes 1..22) and stores flags from byte 23.
- * - Uses inter-frame gap timing to resync frame assembly.
+ * - Uses gap-based reset plus in-frame header scan for fast re-alignment.
  */
-
-/*
-TODO:
-improve implementation:
-- Unsynced mode: receive 1 byte repeatedly until byte is 0x0F.
-- Synced mode: receive full 25-byte frame into rx_buffer_.
-- Validate header/footer (0x0F, 0x00) and decode.
-- If invalid frame: drop back to unsynced 1-byte hunt mode.
-- On UART error callback: clear error and drop to unsynced mode.
-- and.. switch to DMA+IDLE calls
-*/
 
 #include "dev_sbus.hpp"
 #include "stm_hal_shims.hpp"
@@ -43,6 +32,9 @@ static const struct {
 } kDefaultRxMap[] = {
   { USART2, { GPIOA, GPIO_PIN_3, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW } },
 };
+
+static constexpr uint8_t kSbusHeader = 0x0F;
+static constexpr uint8_t kSbusFooter = 0x00;
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -66,10 +58,12 @@ static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
 bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override) {
   rx_index_       = 0;
   valid_          = false;
+  use_dma_rx_     = false;
   last_rx_ms_     = 0;
   last_update_ms_ = 0;
   flags_          = 0;
   memset(channels_, 0, sizeof(channels_));
+  memset(dma_rx_buffer_, 0, sizeof(dma_rx_buffer_));
   memset(rx_buffer_, 0, sizeof(rx_buffer_));
 
   my_huart_ = &huart;
@@ -90,40 +84,36 @@ bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_overr
     }
   }
 
-  // Arm single-byte interrupt receive.
-  HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
-  return true;
+  // Arm RX path: DMA+IDLE first, IT fallback if DMA arm fails.
+  return ArmReceive();
 }
 
 void DevSBus::HandleRx(uint8_t byte) {
-  uint32_t now = HAL_GetTick();
+  ProcessRxBytes(&byte, 1);
 
-  // Gap-based frame sync: if we've been idle longer than one inter-frame gap,
-  // reset and expect a fresh header on the next byte.
-  if ((now - last_rx_ms_) > SBUS_GAP_RESET_MS) {
-    rx_index_ = 0;
+  // IT path must be re-armed per byte.
+  if (!use_dma_rx_) {
+    (void)ArmItReceive();
   }
-  last_rx_ms_ = now;
+}
 
-  // At index 0 we only accept the SBUS header byte
-  if (rx_index_ == 0 && byte != 0x0F) {
-    return;  // Not a header — wait for next gap
-  }
-
-  rx_buffer_[rx_index_++] = byte;
-
-  if (rx_index_ == SBUS_FRAME_LEN) {
-    rx_index_ = 0;
-    // Validate header + footer
-    if (rx_buffer_[0] == 0x0F && rx_buffer_[24] == 0x00) {
-      DecodeFrame();
-      valid_          = true;
-      last_update_ms_ = now;
-    }
+void DevSBus::HandleRxEvent(uint16_t size) {
+  if (size > 0 && size <= SBUS_DMA_RX_BUF_LEN) {
+    ProcessRxBytes(dma_rx_buffer_, size);
   }
 
-  // Re-arm for next byte
-  HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1);
+  // DMA+IDLE path must always be re-armed after each event.
+  (void)ArmDmaReceive();
+}
+
+void DevSBus::HandleError(void) {
+  rx_index_ = 0;
+
+  if (my_huart_ != nullptr) {
+    (void)HAL_UART_AbortReceive(my_huart_);
+  }
+
+  (void)ArmReceive();
 }
 
 bool DevSBus::GetChannels(uint16_t *channels, uint8_t &channel_count) const {
@@ -140,6 +130,83 @@ bool DevSBus::IsFresh(void) const {
 
 uint8_t DevSBus::GetFlags(void) const {
   return flags_;
+}
+
+bool DevSBus::ArmReceive(void) {
+  if (ArmDmaReceive()) return true;
+  return ArmItReceive();
+}
+
+bool DevSBus::ArmDmaReceive(void) {
+  if (my_huart_ == nullptr) return false;
+
+  if (HAL_UARTEx_ReceiveToIdle_DMA(my_huart_, dma_rx_buffer_, SBUS_DMA_RX_BUF_LEN) != HAL_OK) {
+    use_dma_rx_ = false;
+    return false;
+  }
+
+  if (my_huart_->hdmarx != nullptr) {
+    __HAL_DMA_DISABLE_IT(my_huart_->hdmarx, DMA_IT_HT);
+  }
+  use_dma_rx_ = true;
+  return true;
+}
+
+bool DevSBus::ArmItReceive(void) {
+  if (my_huart_ == nullptr) return false;
+  if (HAL_UART_Receive_IT(my_huart_, &rx_byte_, 1) != HAL_OK) return false;
+  use_dma_rx_ = false;
+  return true;
+}
+
+void DevSBus::ProcessRxBytes(const uint8_t *data, uint16_t len) {
+  if (data == nullptr || len == 0) return;
+
+  const uint32_t now = HAL_GetTick();
+  if ((now - last_rx_ms_) > SBUS_GAP_RESET_MS) {
+    rx_index_ = 0;
+  }
+  last_rx_ms_ = now;
+
+  for (uint16_t i = 0; i < len; i++) {
+    const uint8_t byte = data[i];
+
+    if (rx_index_ == 0 && byte != kSbusHeader) {
+      continue;
+    }
+
+    rx_buffer_[rx_index_++] = byte;
+
+    if (rx_index_ == SBUS_FRAME_LEN) {
+      if (rx_buffer_[0] == kSbusHeader && rx_buffer_[24] == kSbusFooter) {
+        DecodeFrame();
+        valid_          = true;
+        last_update_ms_ = HAL_GetTick();
+        rx_index_       = 0;
+      } else {
+        RealignAfterInvalidFrame();
+      }
+    }
+  }
+}
+
+void DevSBus::RealignAfterInvalidFrame(void) {
+  int new_start = -1;
+  for (int i = 1; i < static_cast<int>(SBUS_FRAME_LEN); i++) {
+    if (rx_buffer_[i] == kSbusHeader) {
+      new_start = i;
+      break;
+    }
+  }
+
+  if (new_start < 0) {
+    rx_index_ = 0;
+    return;
+  }
+
+  const int remaining = static_cast<int>(SBUS_FRAME_LEN) - new_start;
+  memmove(rx_buffer_, &rx_buffer_[new_start], static_cast<size_t>(remaining));
+  rx_index_ = remaining;
 }
 
 // ---------------------------------------------------------------------------

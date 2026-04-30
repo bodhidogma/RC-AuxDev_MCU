@@ -17,6 +17,7 @@
 
 #define SBUS_CHANNELS       16u
 #define SBUS_FRAME_LEN      25u
+#define SBUS_DMA_RX_BUF_LEN 64u
 #define SBUS_STALE_MS       100u   // ms without update before data marked stale
 #define SBUS_GAP_RESET_MS   4u     // inter-frame gap threshold for frame sync
 
@@ -53,6 +54,13 @@ class DevSBus {
   // Re-arms single-byte IT internally.
   void HandleRx(uint8_t byte);
 
+  // Call from HAL_UARTEx_RxEventCallback with a DMA chunk size.
+  // Parses all received bytes and re-arms DMA receive-to-idle.
+  void HandleRxEvent(uint16_t size);
+
+  // Call from HAL_UART_ErrorCallback to resync receive state and re-arm RX.
+  void HandleError(void);
+
   // Copy latest decoded channel values (SBUS_CHANNELS elements) into `channels`.
   // Returns false if no valid frame has been received yet.
   bool GetChannels(uint16_t *channels, uint8_t &channel_count) const;
@@ -67,10 +75,18 @@ class DevSBus {
   uint8_t rx_byte_ = 0;
 
  private:
+  bool ArmReceive(void);
+  bool ArmDmaReceive(void);
+  bool ArmItReceive(void);
+  void ProcessRxBytes(const uint8_t *data, uint16_t len);
+  void RealignAfterInvalidFrame(void);
   void DecodeFrame(void);
 
   UART_HandleTypeDef *my_huart_  = nullptr;
   SBusRxConfig        rx_config_ = {};      // resolved active RX GPIO config
+
+  bool     use_dma_rx_            = false;
+  uint8_t  dma_rx_buffer_[SBUS_DMA_RX_BUF_LEN];
 
   uint8_t  rx_buffer_[SBUS_FRAME_LEN];
   int      rx_index_             = 0;

@@ -67,6 +67,8 @@ void Error_Handler(void);
 #define A11_IGNITER_SENS_GPIO_Port GPIOA
 #define T2C2_PWMIO2_Pin GPIO_PIN_1
 #define T2C2_PWMIO2_GPIO_Port GPIOA
+#define _usart2_tx_Pin GPIO_PIN_2
+#define _usart2_tx_GPIO_Port GPIOA
 #define U2RT15C2_SBUS_CPPM_Pin GPIO_PIN_3
 #define U2RT15C2_SBUS_CPPM_GPIO_Port GPIOA
 #define I_BUTTON_Pin GPIO_PIN_0

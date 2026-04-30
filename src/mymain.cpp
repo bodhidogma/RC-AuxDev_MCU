@@ -201,6 +201,9 @@ void main_loop(void) {
             len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
                            sbus_ch[ch]);
             console.Send((const char*)buf, len);
+            if (sbus_ch[ch] == 0) {
+              break;
+            }
           }
           console.Send("\r\n", 2);
         }
