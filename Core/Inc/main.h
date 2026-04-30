@@ -75,8 +75,6 @@ void Error_Handler(void);
 #define T3_PWM_CH3_GPIO_Port GPIOB
 #define T3_PWM_CH4_Pin GPIO_PIN_1
 #define T3_PWM_CH4_GPIO_Port GPIOB
-#define BOOT0_Pin GPIO_PIN_2
-#define BOOT0_GPIO_Port GPIOB
 #define _usart3_tx_Pin GPIO_PIN_10
 #define _usart3_tx_GPIO_Port GPIOB
 #define U3T2_SBUS_CPPM_Pin GPIO_PIN_11
