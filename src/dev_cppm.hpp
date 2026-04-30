@@ -19,6 +19,7 @@
 #define CPPM_CHANNELS 18u       // max RC channels per CPPM frame
 #define CPPM_SYNC_GAP_US 3000u  // gap >= this is treated as frame sync
 #define CPPM_STALE_MS 100u      // ms without update before data marked stale
+#define CPPM_IC_FILTER 4u       // timer IC digital filter for glitch rejection
 
 // Optional GPIO override for CPPM input capture pin.
 // Set port = nullptr to trust IOC/CubeMX default pin assignment.

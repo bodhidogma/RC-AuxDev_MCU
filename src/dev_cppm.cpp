@@ -63,7 +63,7 @@ static bool ConfigureTimerInputCapture(TIM_HandleTypeDef* htim,
   sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
+  sConfigIC.ICFilter = CPPM_IC_FILTER;
 
   if (HAL_TIM_IC_Init(htim) != HAL_OK) return false;
   if (HAL_TIM_IC_ConfigChannel(htim, &sConfigIC, hal_channel) != HAL_OK) return false;
@@ -105,20 +105,22 @@ bool DevCPPM::Initialize(const CppmInputConfig* configs, int count) {
 
   for (int i = 0; i < input_count_; i++) {
     CppmInput &inp = inputs_[i];
+    const CppmGpioConfig* gpio_cfg = &inp.gpio_cfg;
+    CppmGpioConfig default_cfg = {};
 
     // Default path requires a known IOC mapping.
     // Override path is allowed to bind pins not present in default map.
     if (!inp.use_gpio_override) {
-      CppmGpioConfig default_cfg = {};
       if (!ResolveDefaultInputConfig(inp.htim, inp.hal_channel, default_cfg)) {
         return false;
       }
+      gpio_cfg = &default_cfg;
     }
 
-    if (inp.use_gpio_override) {
-      if (!StmHalInitGpioAf(inp.gpio_cfg.port, inp.gpio_cfg.pin,
-                             inp.gpio_cfg.alternate, inp.gpio_cfg.pull,
-                             inp.gpio_cfg.speed)) return false;
+    if (!StmHalInitGpioAf(gpio_cfg->port, gpio_cfg->pin,
+                          gpio_cfg->alternate, gpio_cfg->pull,
+                          gpio_cfg->speed)) {
+      return false;
     }
 
     if (!ConfigureTimerInputCapture(inp.htim, inp.hal_channel)) return false;

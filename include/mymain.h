@@ -54,7 +54,7 @@ extern UART_HandleTypeDef huart2;
 #define USE_PWM_IN 0
 #if !USE_PWM_IN
 #define USE_PWM_OUT 1   // output CH# (1-4)
-#define USE_SBUS 1
+#define USE_SBUS 0
 #if !USE_SBUS
 #define USE_CPPM 1
 #endif  // !USE_SBUS
