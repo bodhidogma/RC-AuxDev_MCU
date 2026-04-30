@@ -53,12 +53,13 @@ extern UART_HandleTypeDef huart2;
 // enable at startup / runtime, but for now just choose 1
 #define USE_PWM_IN 0
 #if !USE_PWM_IN
-#define USE_PWM_OUT 1
-#endif
-#define USE_SBUS 0
+#define USE_PWM_OUT 1   // output CH# (1-4)
+#define USE_SBUS 1
 #if !USE_SBUS
 #define USE_CPPM 1
-#endif
+#endif  // !USE_SBUS
+#endif  // !USE_PWM_IN
+
 #define USE_WS2812 1
 
 // arduino like macros

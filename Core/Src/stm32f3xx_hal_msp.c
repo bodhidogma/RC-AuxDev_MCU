@@ -433,12 +433,14 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     PB3     ------> SPI3_SCK
     PB5     ------> SPI3_MOSI
     */
+    /* NOTE PB3 must not be enabled if we want to support SWO debugging.
     GPIO_InitStruct.Pin = GPIO_PIN_3;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF6_SPI3;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    */
 
     GPIO_InitStruct.Pin = S3_WS2812_CH2_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -465,7 +467,7 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* hspi)
     __HAL_LINKDMA(hspi,hdmatx,hdma_spi3_tx);
 
     /* USER CODE BEGIN SPI3_MspInit 1 */
-    // HAL_GPIO_DeInit(GPIOB, GPIO_PIN_3);
+    // HAL_GPIO_DeInit(GPIOB, GPIO_PIN_3);  // disable PB3 to support SWO debugging
 
     /* USER CODE END SPI3_MspInit 1 */
   }
@@ -703,12 +705,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     PA2     ------> USART2_TX
     PA3     ------> USART2_RX
     */
-    GPIO_InitStruct.Pin = _usart2_tx_Pin;
+    GPIO_InitStruct.Pin = GPIO_PIN_2;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-    HAL_GPIO_Init(_usart2_tx_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = U2RT15C2_SBUS_CPPM_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -767,7 +769,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     PA2     ------> USART2_TX
     PA3     ------> USART2_RX
     */
-    HAL_GPIO_DeInit(GPIOA, _usart2_tx_Pin|U2RT15C2_SBUS_CPPM_Pin);
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2|U2RT15C2_SBUS_CPPM_Pin);
 
     /* USART2 interrupt DeInit */
     HAL_NVIC_DisableIRQ(USART2_IRQn);

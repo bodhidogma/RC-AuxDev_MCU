@@ -81,10 +81,10 @@ static void MX_I2C1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_I2C2_Init(void);
-static void MX_USART2_UART_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_TIM15_Init(void);
 static void MX_CRC_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -144,10 +144,10 @@ int main(void)
   MX_TIM2_Init();
   MX_SPI2_Init();
   MX_I2C2_Init();
-  MX_USART2_UART_Init();
   MX_SPI3_Init();
   MX_TIM15_Init();
   MX_CRC_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   // MYCUST: entry point

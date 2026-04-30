@@ -156,6 +156,7 @@ PA15.Signal=S_TIM2_CH1_ETR
 PA2.Locked=true
 PA2.Mode=Asynchronous
 PA2.Signal=USART2_TX
+PA2.Stacked=true
 PA3.GPIOParameters=GPIO_Label
 PA3.GPIO_Label=U2RT15C2_SBUS_CPPM
 PA3.Locked=true
