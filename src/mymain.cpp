@@ -171,15 +171,20 @@ void main_loop(void) {
       {
         uint32_t pulse_us = 0, period_us = 0;
         bool fresh;
+        bool valid;
         int len;
         len = snprintf((char*)buf, sizeof(buf), "PWM IN: ");
         console.Send((const char*)buf, len);
         for (int ch = 0; ch < pwm_dev_in.channel_count_; ch++) {
           fresh = pwm_dev_in.IsFresh(ch);
-          pwm_dev_in.GetChannel(ch, pulse_us, period_us);
-          len = snprintf((char*)buf, sizeof(buf), "%d:%c%4lu\t", ch + 1,
-                         fresh ? ' ' : '~', pulse_us);
+          valid = pwm_dev_in.GetChannel(ch, pulse_us, period_us);
+          len = snprintf((char*)buf, sizeof(buf), "%d:%c%s\t", ch + 1,
+                         fresh ? ' ' : '~', valid ? "ok" : "--");
           console.Send((const char*)buf, len);
+          if (valid) {
+            len = snprintf((char*)buf, sizeof(buf), "(%4lu)", pulse_us);
+            console.Send((const char*)buf, len);
+          }
         }
         console.Send("\r\n", 2);
       }

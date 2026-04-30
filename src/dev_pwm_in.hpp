@@ -16,6 +16,12 @@
 
 #define PWM_IN_MAX_CHANNELS  4
 #define PWM_IN_STALE_MS      100u   // ms without update before channel marked stale
+#define PWM_IN_MIN_PULSE_US  750u   // lower bound for valid RC high pulse width
+#define PWM_IN_MAX_PULSE_US  2250u  // upper bound for valid RC high pulse width
+#define PWM_IN_MIN_PERIOD_US 3000u  // lower bound for valid RC frame period
+#define PWM_IN_MAX_PERIOD_US 30000u // upper bound for valid RC frame period
+#define PWM_IN_EDGE_TIMEOUT_MS 30u  // timeout while waiting for falling edge
+#define PWM_IN_IC_FILTER     4u     // timer IC digital filter for glitch rejection
 
 // Per-channel GPIO configuration.
 // Set port = nullptr to use the IOC/CubeMX default pin assignment for this channel.
@@ -38,8 +44,12 @@ struct PwmChannel {
   uint16_t            prev_rise_tick;    // counter value at previous rising edge (for period)
   uint32_t            pulse_us;          // high pulse width in microseconds
   uint32_t            period_us;         // full period in microseconds
+  uint32_t            pending_period_us; // candidate period from latest rising edge
   uint32_t            last_update_ms;    // HAL_GetTick() at last completed capture
+  uint32_t            last_rise_ms;      // HAL_GetTick() at last rising edge
   bool                expect_rise;       // true = waiting for rising edge
+  bool                have_prev_rise;    // true after at least one rising edge captured
+  bool                pending_period_valid; // true if pending_period_us is inside bounds
   bool                valid;             // true after first full pulse captured
 };
 
