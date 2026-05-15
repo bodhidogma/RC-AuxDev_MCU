@@ -8,6 +8,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 #include <cstring>
 
+#include "usbd_cdc_if.h"
 #include "mymain.h"
 #include "dev_sbus.hpp"
 
@@ -66,6 +67,12 @@ bool StmConsole::Initialize(void) {
 bool StmConsole::Update(void) {
   bool status = false;
 
+  if (my_huart_ == nullptr && my_cdc_uart_ &&
+      (tx_active_buff_len_ != 0 || tx_buffer_head_ != tx_buffer_tail_) &&
+      CDC_TransmitReady_FS() == USBD_OK) {
+    update_tx_head();
+  }
+
   if (cmd_ready_) {
     status = process_cmd();
 
@@ -122,20 +129,11 @@ bool StmConsole::process_cmd(void) {
   return true;
 }
 
-/** check if USB CDC is ready to transmit
- *
- */
-#ifndef CDC_TransmitReady_FS
-USBD_StatusTypeDef CDC_TransmitReady_FS(void) {
-  return USBD_OK;
-}
-#endif
-
 /** update tx pointers after a completed TX
  *
  */
 uint8_t StmConsole::update_tx_head(void) {
-  HAL_StatusTypeDef status = HAL_OK;
+  uint8_t status = HAL_OK;
 
   // entire buffer has been TX'd
   if (tx_buffer_head_ == tx_buffer_tail_) {
@@ -144,21 +142,27 @@ uint8_t StmConsole::update_tx_head(void) {
   }
   // need to trigger a new TX operation (still active)
   else {
-    tx_active_buff_len_ = tx_buffer_tail_ - tx_buffer_head_;
+    uint16_t pending_len = tx_buffer_tail_ - tx_buffer_head_;
     if (my_huart_ != nullptr) {
       status = HAL_UART_Transmit_IT(my_huart_,
                                     (uint8_t *)&tx_buffer_[tx_buffer_head_],
-                                    tx_active_buff_len_);
+                                    pending_len);
     } else {
-      if (CDC_TransmitReady_FS() == USBD_OK)
-      {
-        CDC_Transmit_FS((uint8_t *)&tx_buffer_[tx_buffer_head_],
-                        tx_active_buff_len_);
+      if (CDC_TransmitReady_FS() == USBD_OK) {
+        status = CDC_Transmit_FS((uint8_t *)&tx_buffer_[tx_buffer_head_],
+                                 pending_len);
+      } else {
+        status = HAL_BUSY;
       }
     }
 
-    // TX submitted, head is now @ tail
-    tx_buffer_head_ = tx_buffer_tail_;
+    if (status == HAL_OK) {
+      tx_active_buff_len_ = pending_len;
+      // TX submitted, head is now @ tail
+      tx_buffer_head_ = tx_buffer_tail_;
+    } else {
+      tx_active_buff_len_ = 0;
+    }
   }
 
   return status;
@@ -168,7 +172,7 @@ uint8_t StmConsole::update_tx_head(void) {
  *
  */
 uint8_t StmConsole::Send(const char *buf, uint16_t len) {
-  HAL_StatusTypeDef status = HAL_OK;
+  uint8_t status = HAL_OK;
   // enough space to output our buffer?
   if (len > (kTxBuffLen - tx_buffer_tail_)) {
     return HAL_BUSY;
@@ -179,24 +183,7 @@ uint8_t StmConsole::Send(const char *buf, uint16_t len) {
   tx_buffer_tail_ += len;
 
   if (tx_active_buff_len_ == 0) {
-    tx_active_buff_len_ = len;
-    if (my_huart_ != nullptr) {
-      status = HAL_UART_Transmit_IT(my_huart_,
-                                    (uint8_t *)&tx_buffer_[tx_buffer_head_],
-                                    tx_active_buff_len_);
-      // status = HAL_UART_Transmit_DMA(my_huart_,
-      //                               (uint8_t *)&tx_buffer_[tx_buffer_head_],
-      //                               tx_active_buff_len_);
-    } else {
-      if (CDC_TransmitReady_FS() == USBD_OK)
-      {
-        CDC_Transmit_FS((uint8_t *)&tx_buffer_[tx_buffer_head_],
-                        tx_active_buff_len_);
-      }
-    }
-
-    // TX submitted, head is now @ tail
-    tx_buffer_head_ = tx_buffer_tail_;
+    status = update_tx_head();
   }
 
   return status;
