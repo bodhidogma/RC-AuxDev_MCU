@@ -4,7 +4,8 @@
  * - Enable timer input capture with 1 MHz timer tick (1 tick = 1 us).
  * - Capture polarity: rising edge.
  * - Configure GPIO as timer alternate-function input for each used channel.
- * - Keep pin mapping aligned with kDefaultInputMap below unless using overrides.
+ * - Keep pin mapping aligned with kDefaultInputMap below unless using
+ * overrides.
  *
  * Implementation notes:
  * - Gap >= CPPM_SYNC_GAP_US marks frame sync.
@@ -14,8 +15,10 @@
  */
 
 #include "dev_cppm.hpp"
-#include "stm_hal_shims.hpp"
+
 #include <string.h>
+
+#include "stm_hal_shims.hpp"
 
 // Forward declaration — global instance defined in mymain.cpp
 extern DevCPPM cppm;
@@ -35,21 +38,26 @@ static const struct {
   CppmGpioConfig gpio;
 } kDefaultInputMap[] = {
     // IOC TIM2 input-capture defaults
-		{TIM2, TIM_CHANNEL_1,
-		 {GPIOA, GPIO_PIN_15, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM2, TIM_CHANNEL_2,
-		 {GPIOA, GPIO_PIN_1, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM2, TIM_CHANNEL_3,
-		 {GPIOB, GPIO_PIN_10, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
-		{TIM2, TIM_CHANNEL_4,
-		 {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+    {TIM2,
+     TIM_CHANNEL_1,
+     {GPIOA, GPIO_PIN_15, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+    {TIM2,
+     TIM_CHANNEL_2,
+     {GPIOA, GPIO_PIN_1, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+    {TIM2,
+     TIM_CHANNEL_3,
+     {GPIOB, GPIO_PIN_10, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
+    {TIM2,
+     TIM_CHANNEL_4,
+     {GPIOB, GPIO_PIN_11, GPIO_AF1_TIM2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
 static bool ResolveDefaultInputConfig(TIM_HandleTypeDef* htim,
                                       uint32_t hal_channel,
                                       CppmGpioConfig& out) {
   for (const auto& entry : kDefaultInputMap) {
-    if (entry.tim_instance == htim->Instance && entry.hal_channel == hal_channel) {
+    if (entry.tim_instance == htim->Instance &&
+        entry.hal_channel == hal_channel) {
       out = entry.gpio;
       return true;
     }
@@ -66,7 +74,8 @@ static bool ConfigureTimerInputCapture(TIM_HandleTypeDef* htim,
   sConfigIC.ICFilter = CPPM_IC_FILTER;
 
   if (HAL_TIM_IC_Init(htim) != HAL_OK) return false;
-  if (HAL_TIM_IC_ConfigChannel(htim, &sConfigIC, hal_channel) != HAL_OK) return false;
+  if (HAL_TIM_IC_ConfigChannel(htim, &sConfigIC, hal_channel) != HAL_OK)
+    return false;
   return true;
 }
 
@@ -76,19 +85,19 @@ static bool ConfigureTimerInputCapture(TIM_HandleTypeDef* htim,
 
 int DevCPPM::Register(const CppmInputConfig& cfg) {
   if (input_count_ >= static_cast<int>(CPPM_MAX_INPUTS)) return -1;
-  CppmInput &inp       = inputs_[input_count_];
-  inp.htim             = cfg.htim;
-  inp.hal_channel      = cfg.hal_channel;
-  inp.gpio_cfg         = cfg.gpio;
+  CppmInput& inp = inputs_[input_count_];
+  inp.htim = cfg.htim;
+  inp.hal_channel = cfg.hal_channel;
+  inp.gpio_cfg = cfg.gpio;
   inp.use_gpio_override = (cfg.gpio.port != nullptr);
-  inp.prev_tick        = 0;
-  inp.frame_period_us  = 0;
+  inp.prev_tick = 0;
+  inp.frame_period_us = 0;
   inp.frame_start_tick = 0;
-  inp.last_update_ms   = 0;
-  inp.ch_idx           = 0;
-  inp.num_channels     = 0;
-  inp.synced           = false;
-  inp.valid            = false;
+  inp.last_update_ms = 0;
+  inp.ch_idx = 0;
+  inp.num_channels = 0;
+  inp.synced = false;
+  inp.valid = false;
   memset(inp.channels, 0, sizeof(inp.channels));
   return input_count_++;
 }
@@ -104,7 +113,7 @@ bool DevCPPM::Initialize(const CppmInputConfig* configs, int count) {
   }
 
   for (int i = 0; i < input_count_; i++) {
-    CppmInput &inp = inputs_[i];
+    CppmInput& inp = inputs_[i];
     const CppmGpioConfig* gpio_cfg = &inp.gpio_cfg;
     CppmGpioConfig default_cfg = {};
 
@@ -117,9 +126,8 @@ bool DevCPPM::Initialize(const CppmInputConfig* configs, int count) {
       gpio_cfg = &default_cfg;
     }
 
-    if (!StmHalInitGpioAf(gpio_cfg->port, gpio_cfg->pin,
-                          gpio_cfg->alternate, gpio_cfg->pull,
-                          gpio_cfg->speed)) {
+    if (!StmHalInitGpioAf(gpio_cfg->port, gpio_cfg->pin, gpio_cfg->alternate,
+                          gpio_cfg->pull, gpio_cfg->speed)) {
       return false;
     }
 
@@ -139,19 +147,19 @@ bool DevCPPM::Initialize(TIM_HandleTypeDef* htim, uint32_t hal_channel) {
   return Initialize(&cfg, 1);
 }
 
-void DevCPPM::HandleCapture(TIM_HandleTypeDef *htim) {
+void DevCPPM::HandleCapture(TIM_HandleTypeDef* htim) {
   HAL_TIM_ActiveChannel active = htim->Channel;
 
   for (int i = 0; i < input_count_; i++) {
-    CppmInput &inp = inputs_[i];
+    CppmInput& inp = inputs_[i];
     if (inp.htim->Instance != htim->Instance) continue;
     if (chan_to_active(inp.hal_channel) != active) continue;
 
-    uint16_t tick = static_cast<uint16_t>(
-        HAL_TIM_ReadCapturedValue(htim, inp.hal_channel));
+    uint16_t tick =
+        static_cast<uint16_t>(HAL_TIM_ReadCapturedValue(htim, inp.hal_channel));
 
-    uint32_t gap_us = static_cast<uint32_t>(
-        static_cast<uint16_t>(tick - inp.prev_tick));
+    uint32_t gap_us =
+        static_cast<uint32_t>(static_cast<uint16_t>(tick - inp.prev_tick));
     inp.prev_tick = tick;
 
     if (gap_us >= CPPM_SYNC_GAP_US) {
@@ -159,13 +167,13 @@ void DevCPPM::HandleCapture(TIM_HandleTypeDef *htim) {
       if (inp.synced && inp.ch_idx > 0) {
         inp.frame_period_us = static_cast<uint32_t>(
             static_cast<uint16_t>(tick - inp.frame_start_tick));
-        inp.num_channels    = inp.ch_idx;
-        inp.last_update_ms  = HAL_GetTick();
-        inp.valid           = true;
+        inp.num_channels = inp.ch_idx;
+        inp.last_update_ms = HAL_GetTick();
+        inp.valid = true;
       }
       inp.frame_start_tick = tick;
-      inp.ch_idx           = 0;
-      inp.synced           = true;
+      inp.ch_idx = 0;
+      inp.synced = true;
     } else if (inp.synced) {
       // Channel value: store if within bounds
       if (inp.ch_idx < CPPM_CHANNELS) {
@@ -176,9 +184,10 @@ void DevCPPM::HandleCapture(TIM_HandleTypeDef *htim) {
   }
 }
 
-bool DevCPPM::GetChannels(uint16_t *channels, uint8_t &channel_count, uint16_t &period_us) const {
+bool DevCPPM::GetChannels(uint16_t* channels, uint8_t& channel_count,
+                          uint16_t& period_us) const {
   if (input_count_ == 0) return false;
-  const CppmInput &inp = inputs_[0];  // use first registered CPPM input
+  const CppmInput& inp = inputs_[0];  // use first registered CPPM input
   if (!inp.valid) return false;
   memcpy(channels, inp.channels, sizeof(uint16_t) * CPPM_CHANNELS);
   channel_count = static_cast<int>(inp.num_channels);
@@ -188,13 +197,33 @@ bool DevCPPM::GetChannels(uint16_t *channels, uint8_t &channel_count, uint16_t &
 
 bool DevCPPM::IsFresh() const {
   if (input_count_ == 0) return false;
-  const CppmInput &inp = inputs_[0];
+  const CppmInput& inp = inputs_[0];
   if (!inp.valid) return false;
   return (HAL_GetTick() - inp.last_update_ms) < CPPM_STALE_MS;
 }
 
-// ---------------------------------------------------------------------------
-// HAL callback
-// ---------------------------------------------------------------------------
-
-
+bool DevCPPM::_DumpState(StmConsole& console, uint8_t mode) const {
+#if 1
+  uint16_t cppm_ch[CPPM_CHANNELS];
+  uint8_t cppm_count = 0;
+  uint16_t period_us = 0;
+  bool fresh = IsFresh();
+  bool valid = GetChannels(cppm_ch, cppm_count, period_us);
+  int len = 0;
+  uint8_t buf[64];
+  if (!valid) {
+    console.Send("CPPM: --\r\n", 10);
+  } else {
+    len = snprintf((char*)buf, sizeof(buf), "CPPM[%d @ %dms]:%c ", cppm_count,
+                   period_us / 1000, (fresh ? ' ' : '~'));
+    console.Send((const char*)buf, len);
+    for (int ch = 0; ch < cppm_count; ch++) {
+      len =
+          snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1, cppm_ch[ch]);
+      console.Send((const char*)buf, len);
+    }
+    console.Send("\r\n", 2);
+  }
+#endif  
+  return true;
+}

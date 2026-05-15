@@ -15,7 +15,7 @@
 
 class DevWS2812 {
  public:
-  static constexpr int kMaxLed = 8;
+  static constexpr int kMaxLed = 13;
   static constexpr int kLeadInBytes = 3;
   static constexpr int kResetBytes = 50;
   static constexpr int kSpiBufferSize =

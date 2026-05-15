@@ -14,6 +14,7 @@
 #define DEV_CPPM_HPP
 
 #include "mymain.h"
+#include "stm_console.hpp"
 
 #define CPPM_MAX_INPUTS 1u      // max registered CPPM input wires
 #define CPPM_CHANNELS 18u       // max RC channels per CPPM frame
@@ -79,6 +80,8 @@ class DevCPPM {
 
   // Returns false if no complete frame within CPPM_STALE_MS or not yet valid.
   bool IsFresh() const;
+
+  bool _DumpState(StmConsole& console, uint8_t mode = 0) const;  // for debugging
 
   int input_count_ = 0;
   CppmInput inputs_[CPPM_MAX_INPUTS];

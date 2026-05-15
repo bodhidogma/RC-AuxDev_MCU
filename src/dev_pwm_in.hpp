@@ -13,6 +13,7 @@
 #define _DEV_PWM_IN_HPP_
 
 #include "mymain.h"
+#include "stm_console.hpp"
 
 #define PWM_IN_MAX_CHANNELS  4
 #define PWM_IN_STALE_MS      100u   // ms without update before channel marked stale
@@ -74,6 +75,9 @@ class DevPWMIn {
 
   // Returns false if no capture within PWM_IN_STALE_MS or not yet valid.
   bool IsFresh(int idx) const;
+
+  // Dump state for debugging.
+  bool _DumpState(StmConsole &console, uint8_t mode) const;
 
   int                channel_count_ = 0;
   PwmChannel         channels_[PWM_IN_MAX_CHANNELS];

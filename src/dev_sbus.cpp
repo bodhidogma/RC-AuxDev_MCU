@@ -4,7 +4,8 @@
  * - Configure USART2 for SBUS: 100000 baud, 8E2, RX enabled.
  * - Enable RX pin inversion (required for standard inverted SBUS receivers).
  * - Configure RX GPIO as USART alternate-function input.
- * - Keep UART/pin mapping aligned with kDefaultRxMap below unless using override.
+ * - Keep UART/pin mapping aligned with kDefaultRxMap below unless using
+ * override.
  *
  * Implementation notes:
  * - Uses HAL_UARTEx_ReceiveToIdle_DMA when available; falls back to IT RX.
@@ -14,8 +15,10 @@
  */
 
 #include "dev_sbus.hpp"
-#include "stm_hal_shims.hpp"
+
 #include <string.h>
+
+#include "stm_hal_shims.hpp"
 
 // Forward declaration — global instance defined in mymain.cpp
 extern DevSBus sbus;
@@ -27,10 +30,11 @@ extern DevSBus sbus;
 // Add entries here when enabling additional UART instances.
 // ---------------------------------------------------------------------------
 static const struct {
-  USART_TypeDef     *instance;
-  SBusRxConfig       config;
+  USART_TypeDef* instance;
+  SBusRxConfig config;
 } kDefaultRxMap[] = {
-  { USART2, { GPIOA, GPIO_PIN_3, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW } },
+    {USART2,
+     {GPIOA, GPIO_PIN_3, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
 
 static constexpr uint8_t kSbusHeader = 0x0F;
@@ -41,8 +45,8 @@ static constexpr uint8_t kSbusFooter = 0x00;
 // ---------------------------------------------------------------------------
 
 // Look up the default RX config for a given UART handle.
-static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
-  for (const auto &entry : kDefaultRxMap) {
+static bool ResolveDefaultConfig(UART_HandleTypeDef* huart, SBusRxConfig& out) {
+  for (const auto& entry : kDefaultRxMap) {
     if (huart->Instance == entry.instance) {
       out = entry.config;
       return true;
@@ -55,13 +59,14 @@ static bool ResolveDefaultConfig(UART_HandleTypeDef *huart, SBusRxConfig &out) {
 // Public API
 // ---------------------------------------------------------------------------
 
-bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_override) {
-  rx_index_       = 0;
-  valid_          = false;
-  use_dma_rx_     = false;
-  last_rx_ms_     = 0;
+bool DevSBus::Initialize(UART_HandleTypeDef& huart,
+                         const SBusRxConfig* rx_override) {
+  rx_index_ = 0;
+  valid_ = false;
+  use_dma_rx_ = false;
+  last_rx_ms_ = 0;
   last_update_ms_ = 0;
-  flags_          = 0;
+  flags_ = 0;
   memset(channels_, 0, sizeof(channels_));
   memset(dma_rx_buffer_, 0, sizeof(dma_rx_buffer_));
   memset(rx_buffer_, 0, sizeof(rx_buffer_));
@@ -74,12 +79,12 @@ bool DevSBus::Initialize(UART_HandleTypeDef &huart, const SBusRxConfig *rx_overr
   }
 
   // Override path: re-init RX GPIO to caller-supplied pin/AF via HAL_GPIO_Init.
-  // Default path: IOC/MspInit already configured the pin — nothing extra needed.
+  // Default path: IOC/MspInit already configured the pin — nothing extra
+  // needed.
   if (rx_override != nullptr) {
     rx_config_ = *rx_override;
-    if (!StmHalInitGpioAf(rx_config_.port, rx_config_.pin,
-                          rx_config_.alternate, rx_config_.pull,
-                          rx_config_.speed)) {
+    if (!StmHalInitGpioAf(rx_config_.port, rx_config_.pin, rx_config_.alternate,
+                          rx_config_.pull, rx_config_.speed)) {
       return false;
     }
   }
@@ -116,7 +121,7 @@ void DevSBus::HandleError(void) {
   (void)ArmReceive();
 }
 
-bool DevSBus::GetChannels(uint16_t *channels, uint8_t &channel_count) const {
+bool DevSBus::GetChannels(uint16_t* channels, uint8_t& channel_count) const {
   if (!valid_) return false;
   memcpy(channels, channels_, sizeof(uint16_t) * SBUS_CHANNELS);
   channel_count = SBUS_CHANNELS;
@@ -128,9 +133,35 @@ bool DevSBus::IsFresh(void) const {
   return (HAL_GetTick() - last_update_ms_) < SBUS_STALE_MS;
 }
 
-uint8_t DevSBus::GetFlags(void) const {
-  return flags_;
+bool DevSBus::_DumpState(StmConsole& console, uint8_t mode) const {
+#if 1
+  uint16_t sbus_ch[SBUS_CHANNELS];
+  uint8_t sbus_count = 0;
+  bool fresh = IsFresh();
+  bool valid = GetChannels(sbus_ch, sbus_count);
+  int len;
+  uint8_t buf[64];
+  if (!valid) {
+    console.Send("SBUS: --\r\n", 10);
+  } else {
+    len = snprintf((char*)buf, sizeof(buf), "SBUS[%d]:%c ", sbus_count,
+                   (fresh ? ' ' : '~'));
+    console.Send((const char*)buf, len);
+    for (int ch = 0; ch < sbus_count; ch++) {
+      len =
+          snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1, sbus_ch[ch]);
+      console.Send((const char*)buf, len);
+      if (sbus_ch[ch] == 0) {
+        break;
+      }
+    }
+    console.Send("\r\n", 2);
+  }
+#endif
+  return true;
 }
+
+uint8_t DevSBus::GetFlags(void) const { return flags_; }
 
 bool DevSBus::ArmReceive(void) {
   if (ArmDmaReceive()) return true;
@@ -140,7 +171,8 @@ bool DevSBus::ArmReceive(void) {
 bool DevSBus::ArmDmaReceive(void) {
   if (my_huart_ == nullptr) return false;
 
-  if (HAL_UARTEx_ReceiveToIdle_DMA(my_huart_, dma_rx_buffer_, SBUS_DMA_RX_BUF_LEN) != HAL_OK) {
+  if (HAL_UARTEx_ReceiveToIdle_DMA(my_huart_, dma_rx_buffer_,
+                                   SBUS_DMA_RX_BUF_LEN) != HAL_OK) {
     use_dma_rx_ = false;
     return false;
   }
@@ -159,7 +191,7 @@ bool DevSBus::ArmItReceive(void) {
   return true;
 }
 
-void DevSBus::ProcessRxBytes(const uint8_t *data, uint16_t len) {
+void DevSBus::ProcessRxBytes(const uint8_t* data, uint16_t len) {
   if (data == nullptr || len == 0) return;
 
   const uint32_t now = HAL_GetTick();
@@ -180,9 +212,9 @@ void DevSBus::ProcessRxBytes(const uint8_t *data, uint16_t len) {
     if (rx_index_ == SBUS_FRAME_LEN) {
       if (rx_buffer_[0] == kSbusHeader && rx_buffer_[24] == kSbusFooter) {
         DecodeFrame();
-        valid_          = true;
+        valid_ = true;
         last_update_ms_ = HAL_GetTick();
-        rx_index_       = 0;
+        rx_index_ = 0;
       } else {
         RealignAfterInvalidFrame();
       }
@@ -218,28 +250,32 @@ void DevSBus::RealignAfterInvalidFrame(void) {
  * bytes, continuous stream of bits (no padding between channels).
  */
 void DevSBus::DecodeFrame(void) {
-  const uint8_t *d = &rx_buffer_[1];
+  const uint8_t* d = &rx_buffer_[1];
 
-  channels_[ 0] = ((uint16_t)d[ 0]        | ((uint16_t)d[ 1] << 8))  & 0x07FF;
-  channels_[ 1] = ((uint16_t)d[ 1] >> 3   | ((uint16_t)d[ 2] << 5))  & 0x07FF;
-  channels_[ 2] = ((uint16_t)d[ 2] >> 6   | ((uint16_t)d[ 3] << 2)
-                 | ((uint16_t)d[ 4] << 10)) & 0x07FF;
-  channels_[ 3] = ((uint16_t)d[ 4] >> 1   | ((uint16_t)d[ 5] << 7))  & 0x07FF;
-  channels_[ 4] = ((uint16_t)d[ 5] >> 4   | ((uint16_t)d[ 6] << 4))  & 0x07FF;
-  channels_[ 5] = ((uint16_t)d[ 6] >> 7   | ((uint16_t)d[ 7] << 1)
-                 | ((uint16_t)d[ 8] << 9))  & 0x07FF;
-  channels_[ 6] = ((uint16_t)d[ 8] >> 2   | ((uint16_t)d[ 9] << 6))  & 0x07FF;
-  channels_[ 7] = ((uint16_t)d[ 9] >> 5   | ((uint16_t)d[10] << 3))  & 0x07FF;
-  channels_[ 8] = ((uint16_t)d[11]        | ((uint16_t)d[12] << 8))  & 0x07FF;
-  channels_[ 9] = ((uint16_t)d[12] >> 3   | ((uint16_t)d[13] << 5))  & 0x07FF;
-  channels_[10] = ((uint16_t)d[13] >> 6   | ((uint16_t)d[14] << 2)
-                 | ((uint16_t)d[15] << 10)) & 0x07FF;
-  channels_[11] = ((uint16_t)d[15] >> 1   | ((uint16_t)d[16] << 7))  & 0x07FF;
-  channels_[12] = ((uint16_t)d[16] >> 4   | ((uint16_t)d[17] << 4))  & 0x07FF;
-  channels_[13] = ((uint16_t)d[17] >> 7   | ((uint16_t)d[18] << 1)
-                 | ((uint16_t)d[19] << 9))  & 0x07FF;
-  channels_[14] = ((uint16_t)d[19] >> 2   | ((uint16_t)d[20] << 6))  & 0x07FF;
-  channels_[15] = ((uint16_t)d[20] >> 5   | ((uint16_t)d[21] << 3))  & 0x07FF;
+  channels_[0] = ((uint16_t)d[0] | ((uint16_t)d[1] << 8)) & 0x07FF;
+  channels_[1] = ((uint16_t)d[1] >> 3 | ((uint16_t)d[2] << 5)) & 0x07FF;
+  channels_[2] =
+      ((uint16_t)d[2] >> 6 | ((uint16_t)d[3] << 2) | ((uint16_t)d[4] << 10)) &
+      0x07FF;
+  channels_[3] = ((uint16_t)d[4] >> 1 | ((uint16_t)d[5] << 7)) & 0x07FF;
+  channels_[4] = ((uint16_t)d[5] >> 4 | ((uint16_t)d[6] << 4)) & 0x07FF;
+  channels_[5] =
+      ((uint16_t)d[6] >> 7 | ((uint16_t)d[7] << 1) | ((uint16_t)d[8] << 9)) &
+      0x07FF;
+  channels_[6] = ((uint16_t)d[8] >> 2 | ((uint16_t)d[9] << 6)) & 0x07FF;
+  channels_[7] = ((uint16_t)d[9] >> 5 | ((uint16_t)d[10] << 3)) & 0x07FF;
+  channels_[8] = ((uint16_t)d[11] | ((uint16_t)d[12] << 8)) & 0x07FF;
+  channels_[9] = ((uint16_t)d[12] >> 3 | ((uint16_t)d[13] << 5)) & 0x07FF;
+  channels_[10] = ((uint16_t)d[13] >> 6 | ((uint16_t)d[14] << 2) |
+                   ((uint16_t)d[15] << 10)) &
+                  0x07FF;
+  channels_[11] = ((uint16_t)d[15] >> 1 | ((uint16_t)d[16] << 7)) & 0x07FF;
+  channels_[12] = ((uint16_t)d[16] >> 4 | ((uint16_t)d[17] << 4)) & 0x07FF;
+  channels_[13] =
+      ((uint16_t)d[17] >> 7 | ((uint16_t)d[18] << 1) | ((uint16_t)d[19] << 9)) &
+      0x07FF;
+  channels_[14] = ((uint16_t)d[19] >> 2 | ((uint16_t)d[20] << 6)) & 0x07FF;
+  channels_[15] = ((uint16_t)d[20] >> 5 | ((uint16_t)d[21] << 3)) & 0x07FF;
 
   flags_ = rx_buffer_[23];
 }

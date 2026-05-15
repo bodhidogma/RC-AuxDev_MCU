@@ -14,6 +14,7 @@
 #define DEV_SBUS_HPP
 
 #include "mymain.h"
+#include "stm_console.hpp"
 
 #define SBUS_CHANNELS       16u
 #define SBUS_FRAME_LEN      25u
@@ -67,6 +68,8 @@ class DevSBus {
 
   // Returns false if no valid frame within SBUS_STALE_MS or not yet valid.
   bool IsFresh(void) const;
+
+  bool _DumpState(StmConsole& console, uint8_t mode = 0) const;  // for debugging
 
   // Returns the raw flags byte from the last valid frame.
   uint8_t GetFlags(void) const;
