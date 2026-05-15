@@ -25,8 +25,8 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 /** F103 - USB interface needs to be re-inserted to enumerate properly.
  *
  */
-StmConsole console(&huart1, false);
-// StmConsole console(NULL, true);
+//StmConsole console(&huart1, false); // UART
+StmConsole console(NULL, true); // USB CDC
 
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
 DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
@@ -77,6 +77,7 @@ void main_loop(void) {
 
   // init global classes
   console.Initialize();
+  
   // adc0.Initialize();
 #if USE_PWM_IN
   static const PwmInChanConfig kPwmInChannels[] = {
@@ -168,73 +169,12 @@ void main_loop(void) {
       }
 
 #if USE_PWM_IN  // Print pulse width for each RC channel
-      {
-        uint32_t pulse_us = 0, period_us = 0;
-        bool fresh;
-        bool valid;
-        int len;
-        len = snprintf((char*)buf, sizeof(buf), "PWM IN: ");
-        console.Send((const char*)buf, len);
-        for (int ch = 0; ch < pwm_dev_in.channel_count_; ch++) {
-          fresh = pwm_dev_in.IsFresh(ch);
-          valid = pwm_dev_in.GetChannel(ch, pulse_us, period_us);
-          len = snprintf((char*)buf, sizeof(buf), "%d:%c%s\t", ch + 1,
-                         fresh ? ' ' : '~', valid ? "ok" : "--");
-          console.Send((const char*)buf, len);
-          if (valid) {
-            len = snprintf((char*)buf, sizeof(buf), "(%4lu)", pulse_us);
-            console.Send((const char*)buf, len);
-          }
-        }
-        console.Send("\r\n", 2);
-      }
+      pwm_dev_in._DumpState(console, 0);  // for debugging
 #endif
 #if USE_SBUS  // Print SBUS status (first 4 channels)
-      {
-        uint16_t sbus_ch[SBUS_CHANNELS];
-        uint8_t sbus_count = 0;
-        bool fresh = sbus.IsFresh();
-        bool valid = sbus.GetChannels(sbus_ch, sbus_count);
-        int len;
-        if (!valid) {
-          console.Send("SBUS: --\r\n", 10);
-        } else {
-          len = snprintf((char*)buf, sizeof(buf), "SBUS[%d]:%c ", sbus_count,
-                         (fresh ? ' ' : '~'));
-          console.Send((const char*)buf, len);
-          for (int ch = 0; ch < sbus_count; ch++) {
-            len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
-                           sbus_ch[ch]);
-            console.Send((const char*)buf, len);
-            if (sbus_ch[ch] == 0) {
-              break;
-            }
-          }
-          console.Send("\r\n", 2);
-        }
-      }
+      sbus._DumpState(console, 0);  // for debugging
 #elif USE_CPPM  // Print CPPM status (first 4 channels)
-      {
-        uint16_t cppm_ch[CPPM_CHANNELS];
-        uint8_t cppm_count = 0;
-        uint16_t period_us = 0;
-        bool fresh = cppm.IsFresh();
-        bool valid = cppm.GetChannels(cppm_ch, cppm_count, period_us);
-        int len = 0;
-        if (!valid) {
-          console.Send("CPPM: --\r\n", 10);
-        } else {
-          len = snprintf((char*)buf, sizeof(buf), "CPPM[%d @ %dms]:%c ",
-                         cppm_count, period_us / 1000, (fresh ? ' ' : '~'));
-          console.Send((const char*)buf, len);
-          for (int ch = 0; ch < cppm_count; ch++) {
-            len = snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1,
-                           cppm_ch[ch]);
-            console.Send((const char*)buf, len);
-          }
-          console.Send("\r\n", 2);
-        }
-      }
+      cppm._DumpState(console, 0);  // for debugging
 #endif
     }
 
