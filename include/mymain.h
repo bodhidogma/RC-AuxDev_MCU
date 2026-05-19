@@ -21,7 +21,8 @@ extern "C" {
  */
 void main_loop();
 
-//extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc3;
 
 //extern CRC_HandleTypeDef hcrc;
 

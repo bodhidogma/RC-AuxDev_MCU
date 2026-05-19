@@ -7,6 +7,7 @@
 
 // #include "mymain.h"
 #include "stm_hal_shims.hpp"
+#include "dev_adc.hpp"
 #include "dev_cppm.hpp"
 #include "dev_pwm_in.hpp"
 #include "dev_sbus.hpp"
@@ -41,9 +42,34 @@ bool StmHalInitGpioAf(GPIO_TypeDef *port, uint16_t pin,
 }
 
 extern uint8_t console_uart_rx_buffer_[1];
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc3;
+
+extern DevADC adc_devs[];
+extern const size_t kNumAdcs;
 extern DevSBus sbus;
 extern DevCPPM cppm;
 extern DevPWMIn pwm_dev_in;
+
+extern "C" void ADC1_2_IRQHandler(void) {
+  HAL_ADC_IRQHandler(&hadc1);
+}
+
+extern "C" void ADC3_IRQHandler(void) {
+  HAL_ADC_IRQHandler(&hadc3);
+}
+
+extern "C" void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+  for (size_t i = 0; i < kNumAdcs; ++i) {
+    adc_devs[i].HandleConvCplt(hadc);
+  }
+}
+
+extern "C" void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc) {
+  for (size_t i = 0; i < kNumAdcs; ++i) {
+    adc_devs[i].HandleError(hadc);
+  }
+}
 
 /** UART RX complete callback
  *

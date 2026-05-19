@@ -4,7 +4,7 @@
 #include <mymain.h>
 #include <stdio.h>
 
-// #include "dev_adc.hpp"
+#include "dev_adc.hpp"
 #include "WS2812FX.h"
 #include "dev_cppm.hpp"
 #include "dev_led.hpp"
@@ -18,8 +18,6 @@
 
 // transmitter modes: AETR, TAER
 
-// extern ADC_HandleTypeDef hadc1;
-
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /** F103 - USB interface needs to be re-inserted to enumerate properly.
@@ -31,7 +29,21 @@ StmConsole console(NULL, true); // USB CDC
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
 DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
 
-// DevADC adc0(&hadc1);
+
+// Multi-ADC configuration: add more entries as needed
+static const AdcConfig kAdcConfigs[] = {
+  {&hadc1, ADC_CHANNEL_TEMPSENSOR, true},   // Internal temp sensor
+  {&hadc1, ADC_CHANNEL_1, false},           // A1.1 - igniter
+  {&hadc3, ADC_CHANNEL_1, false},           // A3.1 - battery voltage
+};
+
+extern const size_t kNumAdcs = sizeof(kAdcConfigs) / sizeof(kAdcConfigs[0]);
+DevADC adc_devs[kNumAdcs] = {
+  DevADC(kAdcConfigs[0]),
+  DevADC(kAdcConfigs[1]),
+  DevADC(kAdcConfigs[2])
+};
+
 // RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
 DevPWMIn pwm_dev_in;
 // SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted (TAER)
@@ -75,10 +87,13 @@ void main_loop(void) {
   // disable stdio buffering
   setbuf(stdout, NULL);
 
+
   // init global classes
   console.Initialize();
-  
-  // adc0.Initialize();
+  for (size_t i = 0; i < kNumAdcs; ++i) {
+    adc_devs[i].Initialize();
+  }
+
 #if USE_PWM_IN
   static const PwmInChanConfig kPwmInChannels[] = {
       {&htim2, TIM_CHANNEL_1},
@@ -142,6 +157,10 @@ void main_loop(void) {
   led1.SetPattern(DevLED::BLINK3);
 
   while (1) {
+    for (size_t i = 0; i < kNumAdcs; ++i) {
+      adc_devs[i].Update();
+    }
+
     sys_now_ms = millis();
 
     if (sys_now_ms - last_now_ms_ > 1000) {
@@ -166,6 +185,13 @@ void main_loop(void) {
         if (led_mode > FX_MODE_RAIN) {
           led_mode = 0;
         }
+      }
+
+
+      // Print all ADC values
+      for (size_t i = 0; i < kNumAdcs; ++i) {
+        snprintf((char*)buf, sizeof(buf), "adc%u: %d \t", i, adc_devs[i].GetValue());
+        console.Send((const char*)buf, strlen((const char*)buf));
       }
 
 #if USE_PWM_IN  // Print pulse width for each RC channel

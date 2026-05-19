@@ -8,9 +8,9 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 #include <cstring>
 
-#include "usbd_cdc_if.h"
-#include "mymain.h"
 #include "dev_sbus.hpp"
+#include "mymain.h"
+#include "usbd_cdc_if.h"
 
 // external objects
 
@@ -18,7 +18,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 extern DevLED led0;
 extern DevLED led1;
-//extern DevSBus sbus;
+// extern DevSBus sbus;
 
 // global uart rx buffer
 uint8_t console_uart_rx_buffer_[1];
@@ -26,7 +26,7 @@ uint8_t console_uart_rx_buffer_[1];
 /**
  *
  */
-StmConsole::StmConsole(UART_HandleTypeDef *huart, bool cdc_uart) {
+StmConsole::StmConsole(UART_HandleTypeDef* huart, bool cdc_uart) {
   my_huart_ = nullptr;
   my_cdc_uart_ = false;
 
@@ -90,7 +90,7 @@ bool StmConsole::Update(void) {
  */
 bool StmConsole::process_cmd(void) {
   char *cmd, *tok = nullptr;
-  char *args[6] = {nullptr};
+  char* args[6] = {nullptr};
   int c;
 
   cmd = strtok(rx_buffer_, " ");  // find cmd separated by space
@@ -119,8 +119,7 @@ bool StmConsole::process_cmd(void) {
       led0.SetPattern((DevLED::led_pattern_t)c);
     }
     CON_PRINTf("Set LED%d = %d" NL NL, l, c);
-  }
-  else if (!std::strcmp(cmd, "cfg")) {
+  } else if (!std::strcmp(cmd, "cfg")) {
     CON_PRINTf("Config:" NL);
     led0.GetConfig();
     led1.GetConfig();
@@ -144,12 +143,11 @@ uint8_t StmConsole::update_tx_head(void) {
   else {
     uint16_t pending_len = tx_buffer_tail_ - tx_buffer_head_;
     if (my_huart_ != nullptr) {
-      status = HAL_UART_Transmit_IT(my_huart_,
-                                    (uint8_t *)&tx_buffer_[tx_buffer_head_],
-                                    pending_len);
+      status = HAL_UART_Transmit_IT(
+          my_huart_, (uint8_t*)&tx_buffer_[tx_buffer_head_], pending_len);
     } else {
       if (CDC_TransmitReady_FS() == USBD_OK) {
-        status = CDC_Transmit_FS((uint8_t *)&tx_buffer_[tx_buffer_head_],
+        status = CDC_Transmit_FS((uint8_t*)&tx_buffer_[tx_buffer_head_],
                                  pending_len);
       } else {
         status = HAL_BUSY;
@@ -171,7 +169,7 @@ uint8_t StmConsole::update_tx_head(void) {
 /**
  *
  */
-uint8_t StmConsole::Send(const char *buf, uint16_t len) {
+uint8_t StmConsole::Send(const char* buf, uint16_t len) {
   uint8_t status = HAL_OK;
   // enough space to output our buffer?
   if (len > (kTxBuffLen - tx_buffer_tail_)) {
@@ -234,16 +232,15 @@ bool StmConsole::update_rx_buffer(uint8_t data) {
   // echo received char back to serial port
   else {
     // CON_PRINTf("%c", data);
-    Send((char *)&data, 1);
+    Send((char*)&data, 1);
   }
   return true;
 }
 
-
 /** UART TX complete callback
  *
  */
-extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
   // callback is for our UART
   // if (huart->Instance == USART1) {
   if (huart == console.MyHuart()) {
@@ -254,7 +251,7 @@ extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 /** USB CDC RX complete callback
  *
  */
-extern "C" void USBD_CDC_RxCpltCallback(uint8_t *buf, uint32_t len) {
+extern "C" void USBD_CDC_RxCpltCallback(uint8_t* buf, uint32_t len) {
   // do something with USB UART data
   do {
     console.update_rx_buffer(*(buf++));
@@ -264,7 +261,7 @@ extern "C" void USBD_CDC_RxCpltCallback(uint8_t *buf, uint32_t len) {
 /** USB CDC TX complete callback
  *
  */
-extern "C" void USBD_CDC_TxCpltCallback(uint8_t *buf, uint32_t len) {
+extern "C" void USBD_CDC_TxCpltCallback(uint8_t* buf, uint32_t len) {
   // do something with USB UART data
   console.update_tx_head();
 }
