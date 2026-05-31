@@ -205,7 +205,7 @@ bool DevPWMIn::_DumpState(StmConsole &console, uint8_t mode) const {
                    fresh ? ' ' : '~', valid ? "ok" : "--");
     console.Send((const char*)buf, len);
     if (valid) {
-      len = snprintf((char*)buf, sizeof(buf), "(%4lu)", pulse_us);
+      len = snprintf((char*)buf, sizeof(buf), "(%4u)", pulse_us);
       console.Send((const char*)buf, len);
     }
   }

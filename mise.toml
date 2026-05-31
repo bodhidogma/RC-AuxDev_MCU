@@ -1,0 +1,2 @@
+[tools]
+gcc-arm-none-eabi = "latest"

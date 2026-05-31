@@ -2,7 +2,16 @@
     "version": 3,
     "configurePresets": [
         {
-            "name": "default",
+            "name": "default-starm",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+		    "toolchainFile": "${sourceDir}/cmake/starm-clang.cmake",
+            "cacheVariables": {
+            }
+        },
+        {
+            "name": "default-gcc",
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
@@ -12,14 +21,14 @@
         },
         {
             "name": "Debug",
-            "inherits": "default",
+            "inherits": "default-starm",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
             "name": "Release",
-            "inherits": "default",
+            "inherits": "default-starm",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }

@@ -44,16 +44,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    # --
     ${CMAKE_CURRENT_SOURCE_DIR}/src/mymain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/myutils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stm_console.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_led.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_adc.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_in.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_out.cpp
+    # RC receiver input sources
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_in.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_sbus.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_cppm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_crsf.cpp
+    #
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_ws2812.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stm_hal_shims.cpp
     # WS2812FX effects library

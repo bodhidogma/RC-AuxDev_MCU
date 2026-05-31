@@ -61,8 +61,8 @@ bool DevLED::GetConfig(void) {
 
   uint32_t addr = (uint32_t)port_ - (uint32_t)GPIOA;
 
-  snprintf(buff, 32, "led(0x%lx,0x%x) = %d" NL, addr, pin_, (int)pattern_);
-  CON_PRINTf(buff);
+  snprintf(buff, 32, "led(0x%x,0x%x) = %d" NL, addr, pin_, (int)pattern_);
+  CON_PRINTf("%s", buff);
 
   return true;
 }

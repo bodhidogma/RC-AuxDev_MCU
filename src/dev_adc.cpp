@@ -142,8 +142,8 @@ bool DevADC::GetConfig(void) {
 
   uint32_t addr = (uint32_t)my_adc_;
 
-  snprintf(buff, 32, "adc(0x%lx) temp=%d" NL, addr, temp_measurement_ ? 1 : 0);
-  CON_PRINTf(buff);
+  snprintf(buff, 32, "adc(0x%x) temp=%d" NL, addr, temp_measurement_ ? 1 : 0);
+  CON_PRINTf("%s",buff);
 
   return true;
 }

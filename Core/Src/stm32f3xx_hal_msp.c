@@ -17,7 +17,6 @@
   ******************************************************************************
   */
 /* USER CODE END Header */
-
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 /* USER CODE BEGIN Includes */
@@ -744,19 +743,19 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     PA2     ------> USART2_TX
     PA3     ------> USART2_RX
     */
-    GPIO_InitStruct.Pin = _usart2_tx_Pin;
+    GPIO_InitStruct.Pin = U2_RX_OUT_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-    HAL_GPIO_Init(_usart2_tx_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(U2_RX_OUT_GPIO_Port, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = U2RT15C2_SBUS_CPPM_Pin;
+    GPIO_InitStruct.Pin = U2_RX_IN_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-    HAL_GPIO_Init(U2RT15C2_SBUS_CPPM_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(U2_RX_IN_GPIO_Port, &GPIO_InitStruct);
 
     /* USART2 DMA Init */
     /* USART2_RX Init */
@@ -825,7 +824,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     PA2     ------> USART2_TX
     PA3     ------> USART2_RX
     */
-    HAL_GPIO_DeInit(GPIOA, _usart2_tx_Pin|U2RT15C2_SBUS_CPPM_Pin);
+    HAL_GPIO_DeInit(GPIOA, U2_RX_OUT_Pin|U2_RX_IN_Pin);
 
     /* USART2 DMA DeInit */
     HAL_DMA_DeInit(huart->hdmarx);

@@ -82,11 +82,10 @@ void main_loop(void) {
   // CDC_Transmit_FS(buffer, sizeof(buffer));
   // HAL_Delay(100);
   HAL_UART_Transmit_IT(&huart1, buffer, sizeof(buffer));
-  // HAL_Delay(100);
+  HAL_Delay(100);
 
   // disable stdio buffering
   setbuf(stdout, NULL);
-
 
   // init global classes
   console.Initialize();
