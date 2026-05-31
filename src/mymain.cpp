@@ -7,6 +7,7 @@
 #include "dev_adc.hpp"
 #include "WS2812FX.h"
 #include "dev_cppm.hpp"
+#include "dev_crsf.hpp"
 #include "dev_led.hpp"
 #include "dev_pwm_in.hpp"
 #include "dev_pwm_out.hpp"
@@ -48,6 +49,8 @@ DevADC adc_devs[kNumAdcs] = {
 DevPWMIn pwm_dev_in;
 // SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted (TAER)
 DevSBus sbus;
+// CRSF RC receiver input — USARTx, 420000 baud 8N1
+DevCRSF crsf;
 // CPPM RC receiver input — single-wire PPM sum on one TIM IC pin (AETR)
 DevCPPM cppm;
 // PWM output — TIM4, 4 channels, 1 MHz tick
@@ -111,9 +114,11 @@ void main_loop(void) {
   pwm_dev_out.Initialize(kPwmOutChannels, 4);
 #endif
 #if USE_SBUS
-  // Default: IOC/CubeMX already configured the RX GPIO for USART3 on PB11.
-  // If PB11 is assigned to CPPM, SBUS must remain disabled at boot.
+  // Default: IOC/CubeMX already configured the RX GPIO for USART2.
+  // If this pin is assigned to CPPM, SBUS must remain disabled at boot.
   sbus.Initialize(huart2);
+#elif USE_CRSF
+  crsf.Initialize(huart2);
 #elif USE_CPPM
   // Default CPPM target on shared PA3: TIM15_CH2.
   // Non-null port means runtime override is applied by DevCPPM.
@@ -198,6 +203,8 @@ void main_loop(void) {
 #endif
 #if USE_SBUS  // Print SBUS status (first 4 channels)
       sbus._DumpState(console, 0);  // for debugging
+#elif USE_CRSF  // Print CRSF status (first 4 channels)
+  crsf._DumpState(console, 0);  // for debugging
 #elif USE_CPPM  // Print CPPM status (first 4 channels)
       cppm._DumpState(console, 0);  // for debugging
 #endif
@@ -219,6 +226,17 @@ void main_loop(void) {
       servo_pos =
           1000 + (uint16_t)((sbus_ch[0] - 172) * 0.61012);  // #1 == thr
     }
+    #elif USE_CRSF
+      uint16_t crsf_ch[CRSF_CHANNELS];
+      uint8_t crsf_count = 0;
+      fresh = crsf.IsFresh();
+      valid = crsf.GetChannels(crsf_ch, crsf_count);
+      if (valid && fresh) {
+        // Example: map first CRSF channel to a servo PWM output
+        // pwm = 1000 + (crsf - 172) * (2000-1000) / (1811-172)
+        servo_pos =
+          1000 + (uint16_t)((crsf_ch[0] - 172) * 0.61012);
+      }
 #elif USE_CPPM
     uint16_t cppm_ch[CPPM_CHANNELS];
     uint8_t cppm_count = 0;

@@ -40,6 +40,11 @@ static const struct {
 static constexpr uint8_t kSbusHeader = 0x0F;
 static constexpr uint8_t kSbusFooter = 0x00;
 
+// Some SBUS2 receivers use footer variants 0x04/0x14/0x24/0x34.
+static bool IsValidSbusFooter(uint8_t footer) {
+  return (footer == kSbusFooter) || ((footer & 0x0FU) == 0x04U);
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
@@ -210,7 +215,7 @@ void DevSBus::ProcessRxBytes(const uint8_t* data, uint16_t len) {
     rx_buffer_[rx_index_++] = byte;
 
     if (rx_index_ == SBUS_FRAME_LEN) {
-      if (rx_buffer_[0] == kSbusHeader && rx_buffer_[24] == kSbusFooter) {
+      if (rx_buffer_[0] == kSbusHeader && IsValidSbusFooter(rx_buffer_[24])) {
         DecodeFrame();
         valid_ = true;
         last_update_ms_ = HAL_GetTick();

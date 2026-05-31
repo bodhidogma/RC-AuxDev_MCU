@@ -9,6 +9,7 @@
 #include "stm_hal_shims.hpp"
 #include "dev_adc.hpp"
 #include "dev_cppm.hpp"
+#include "dev_crsf.hpp"
 #include "dev_pwm_in.hpp"
 #include "dev_sbus.hpp"
 #include "stm_console.hpp"
@@ -48,6 +49,7 @@ extern ADC_HandleTypeDef hadc3;
 extern DevADC adc_devs[];
 extern const size_t kNumAdcs;
 extern DevSBus sbus;
+extern DevCRSF crsf;
 extern DevCPPM cppm;
 extern DevPWMIn pwm_dev_in;
 
@@ -79,9 +81,17 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
   if (huart == sbus.MyHuart()) {
     // SBUS IT fallback path: HandleRx re-arms IT internally.
     sbus.HandleRx(sbus.rx_byte_);
-  } else
+    return;
+  }
 #endif
-      if (huart == console.MyHuart()) {
+#if USE_CRSF
+  if (huart == crsf.MyHuart()) {
+    crsf.HandleRx(crsf.rx_byte_);
+    return;
+  }
+#endif
+  
+  if (huart == console.MyHuart()) {
     console.update_rx_buffer(console_uart_rx_buffer_[0]);
 
     // re-initiate a rx request
@@ -89,14 +99,25 @@ extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef* huart) {
     // HAL_UART_Receive_IT(huart, &uart_buffer_, 1);
     // HAL_UART_Receive_DMA(huart, &uart_buffer_, 1);
   }
+#if !USE_SBUS && !USE_CRSF
+  (void)huart;
+#endif
 }
 
 extern "C" void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size) {
 #if USE_SBUS
   if (huart == sbus.MyHuart()) {
     sbus.HandleRxEvent(size);
+    return;
   }
-#else
+#endif
+#if USE_CRSF
+  if (huart == crsf.MyHuart()) {
+    crsf.HandleRxEvent(size);
+    return;
+  }
+#endif
+#if !USE_SBUS && !USE_CRSF
   (void)huart;
   (void)size;
 #endif
@@ -108,7 +129,14 @@ extern "C" void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
     sbus.HandleError();
     return;
   }
-#else
+#endif
+#if USE_CRSF
+  if (huart == crsf.MyHuart()) {
+    crsf.HandleError();
+    return;
+  }
+#endif
+#if !USE_SBUS && !USE_CRSF
   (void)huart;
 #endif
 }
