@@ -8,6 +8,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 #include <cstring>
 
+#include "dev_crsf.hpp"
 #include "dev_sbus.hpp"
 #include "mymain.h"
 #include "usbd_cdc_if.h"
@@ -18,6 +19,7 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 
 extern DevLED led0;
 extern DevLED led1;
+extern DevCRSF crsf;
 // extern DevSBus sbus;
 
 // global uart rx buffer
@@ -241,6 +243,13 @@ bool StmConsole::update_rx_buffer(uint8_t data) {
  *
  */
 extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
+#if USE_CRSF
+  if (huart == crsf.MyHuart()) {
+    crsf.HandleTxComplete(huart);
+    return;
+  }
+#endif
+
   // callback is for our UART
   // if (huart->Instance == USART1) {
   if (huart == console.MyHuart()) {

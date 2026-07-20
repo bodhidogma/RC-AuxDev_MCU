@@ -18,12 +18,16 @@
 
 #define CRSF_CHANNELS                    16u
 #define CRSF_FRAME_TYPE_RC_CHANNELS      0x16u
+#define CRSF_FRAME_TYPE_BATTERY_SENSOR   0x08u
+#define CRSF_FRAME_TYPE_ATTITUDE         0x1Eu
+#define CRSF_FRAME_TYPE_FLIGHT_MODE      0x21u
 #define CRSF_MIN_FRAME_LEN               4u   // addr + len + type + crc
 #define CRSF_MAX_FRAME_LEN               64u
 #define CRSF_MAX_LEN_FIELD               (CRSF_MAX_FRAME_LEN - 2u)
 #define CRSF_DMA_RX_BUF_LEN              64u
 #define CRSF_STALE_MS                    100u
 #define CRSF_GAP_RESET_MS                4u
+#define CRSF_TELEMETRY_TEXT_MAX          16u
 
 // RX GPIO pin configuration for startup override.
 // Provide all fields; they map 1-to-1 to GPIO_InitTypeDef members.
@@ -33,6 +37,32 @@ struct CrsfRxConfig {
 	uint32_t      alternate; // e.g. GPIO_AF7_USART2
 	uint32_t      pull;      // GPIO_NOPULL / GPIO_PULLUP / GPIO_PULLDOWN
 	uint32_t      speed;     // GPIO_SPEED_FREQ_HIGH etc.
+};
+
+struct CrsfBatteryTelemetry {
+	uint16_t voltage_cV = 0;      // 0.01V units
+	uint16_t current_cA = 0;      // 0.01A units
+	uint32_t capacity_mAh = 0;    // mAh
+	uint8_t remaining_pct = 0;    // 0..100
+	bool valid = false;
+	bool dirty = false;
+	uint32_t last_update_ms = 0;
+};
+
+struct CrsfAttitudeTelemetry {
+	int16_t pitch_rad_1e4 = 0;
+	int16_t roll_rad_1e4 = 0;
+	int16_t yaw_rad_1e4 = 0;
+	bool valid = false;
+	bool dirty = false;
+	uint32_t last_update_ms = 0;
+};
+
+struct CrsfFlightModeTelemetry {
+	char text[CRSF_TELEMETRY_TEXT_MAX] = {};
+	bool valid = false;
+	bool dirty = false;
+	uint32_t last_update_ms = 0;
 };
 
 class DevCRSF {
@@ -56,6 +86,7 @@ class DevCRSF {
 	void HandleRx(uint8_t byte);
 	void HandleRxEvent(uint16_t size);
 	void HandleError(void);
+	void HandleTxComplete(UART_HandleTypeDef* huart);
 
 	// Copy latest decoded channel values into `channels`.
 	// Returns false if no valid CRSF RC frame has been decoded yet.
@@ -63,6 +94,19 @@ class DevCRSF {
 
 	// Returns false if no valid frame within CRSF_STALE_MS.
 	bool IsFresh(void) const;
+
+	// Push telemetry updates from application modules.
+	void UpdateBatteryTelemetry(uint16_t voltage_cV, uint16_t current_cA,
+														 uint32_t capacity_mAh, uint8_t remaining_pct);
+	void UpdateAttitudeTelemetry(int16_t pitch_rad_1e4, int16_t roll_rad_1e4,
+														 int16_t yaw_rad_1e4);
+	void UpdateFlightModeTelemetry(const char* mode_text);
+
+	// Call periodically from main loop.
+	void SendTelemetryTick(uint32_t now_ms);
+
+	uint32_t TelemetrySentCount(void) const { return telemetry_sent_count_; }
+	uint32_t TelemetryDropCount(void) const { return telemetry_drop_count_; }
 
 	bool _DumpState(StmConsole& console, uint8_t mode = 0) const;  // for debugging
 
@@ -72,6 +116,12 @@ class DevCRSF {
 	bool ArmItReceive(void);
 	void ProcessRxBytes(const uint8_t *data, uint16_t len);
 	bool TryDecodeFrame(const uint8_t *frame, uint8_t total_len);
+	bool BuildTelemetryFrame(uint8_t frame_type, const uint8_t* payload,
+											 uint8_t payload_len, uint8_t* out, uint8_t& out_len) const;
+	bool BuildBatteryPayload(uint8_t* payload, uint8_t& payload_len);
+	bool BuildAttitudePayload(uint8_t* payload, uint8_t& payload_len);
+	bool BuildFlightModePayload(uint8_t* payload, uint8_t& payload_len);
+	bool StartTxFrame(const uint8_t* frame, uint8_t frame_len);
 	uint8_t Crc8DvbS2(const uint8_t *data, uint8_t len) const;
 
 	UART_HandleTypeDef *my_huart_ = nullptr;
@@ -88,6 +138,18 @@ class DevCRSF {
 	uint16_t channels_[CRSF_CHANNELS];
 	bool     valid_ = false;
 	uint32_t last_update_ms_ = 0;
+
+	CrsfBatteryTelemetry battery_;
+	CrsfAttitudeTelemetry attitude_;
+	CrsfFlightModeTelemetry flight_mode_;
+
+	uint8_t tx_buffer_[CRSF_MAX_FRAME_LEN] = {};
+	uint8_t tx_len_ = 0;
+	bool tx_busy_ = false;
+	uint32_t last_telemetry_tx_ms_ = 0;
+	uint8_t telemetry_slot_ = 0;
+	uint32_t telemetry_sent_count_ = 0;
+	uint32_t telemetry_drop_count_ = 0;
 };
 
 #endif  // DEV_CRSF_HPP

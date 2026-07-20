@@ -10,10 +10,13 @@
  * - Uses HAL_UARTEx_ReceiveToIdle_DMA when available; falls back to IT RX.
  * - Parses variable-length CRSF frames: [addr][len][type][payload...][crc].
  * - Decodes frame type 0x16 (packed 16 x 11-bit channels).
+ * 
+ * TODO: add TX connected / link health
  */
 
 #include "dev_crsf.hpp"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "stm_hal_shims.hpp"
@@ -31,6 +34,8 @@ static const struct {
 		{USART2,
 		 {GPIOA, GPIO_PIN_3, GPIO_AF7_USART2, GPIO_NOPULL, GPIO_SPEED_FREQ_LOW}},
 };
+
+static constexpr uint8_t kCrsfTxAddress = 0xEC;  // receiver device address
 
 // ---------------------------------------------------------------------------
 // Private helpers
@@ -56,11 +61,21 @@ bool DevCRSF::Initialize(UART_HandleTypeDef& huart,
 	expected_frame_len_ = 0;
 	valid_ = false;
 	use_dma_rx_ = false;
+	tx_busy_ = false;
+	tx_len_ = 0;
+	last_telemetry_tx_ms_ = 0;
+	telemetry_slot_ = 0;
+	telemetry_sent_count_ = 0;
+	telemetry_drop_count_ = 0;
 	last_rx_ms_ = 0;
 	last_update_ms_ = 0;
 	memset(channels_, 0, sizeof(channels_));
 	memset(dma_rx_buffer_, 0, sizeof(dma_rx_buffer_));
 	memset(rx_buffer_, 0, sizeof(rx_buffer_));
+	memset(tx_buffer_, 0, sizeof(tx_buffer_));
+	battery_ = {};
+	attitude_ = {};
+	flight_mode_ = {};
 
 	my_huart_ = &huart;
 
@@ -72,7 +87,7 @@ bool DevCRSF::Initialize(UART_HandleTypeDef& huart,
 		my_huart_->Init.WordLength = UART_WORDLENGTH_8B;
 		my_huart_->Init.StopBits = UART_STOPBITS_1;
 		my_huart_->Init.Parity = UART_PARITY_NONE;
-		my_huart_->Init.Mode = UART_MODE_RX;
+		my_huart_->Init.Mode = UART_MODE_TX_RX;
 		my_huart_->Init.HwFlowCtl = UART_HWCONTROL_NONE;
 		my_huart_->Init.OverSampling = UART_OVERSAMPLING_16;
 		my_huart_->Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
@@ -125,6 +140,12 @@ void DevCRSF::HandleError(void) {
 	(void)ArmReceive();
 }
 
+void DevCRSF::HandleTxComplete(UART_HandleTypeDef* huart) {
+	if (huart != my_huart_) return;
+	tx_busy_ = false;
+	tx_len_ = 0;
+}
+
 bool DevCRSF::GetChannels(uint16_t* channels, uint8_t& channel_count) const {
 	if (!valid_) return false;
 	memcpy(channels, channels_, sizeof(uint16_t) * CRSF_CHANNELS);
@@ -137,6 +158,88 @@ bool DevCRSF::IsFresh(void) const {
 	return (HAL_GetTick() - last_update_ms_) < CRSF_STALE_MS;
 }
 
+void DevCRSF::UpdateBatteryTelemetry(uint16_t voltage_cV, uint16_t current_cA,
+														 uint32_t capacity_mAh,
+														 uint8_t remaining_pct) {
+	battery_.voltage_cV = voltage_cV;
+	battery_.current_cA = current_cA;
+	battery_.capacity_mAh = capacity_mAh;
+	battery_.remaining_pct = (remaining_pct > 100u) ? 100u : remaining_pct;
+	battery_.valid = true;
+	battery_.dirty = true;
+	battery_.last_update_ms = HAL_GetTick();
+}
+
+void DevCRSF::UpdateAttitudeTelemetry(int16_t pitch_rad_1e4,
+														 int16_t roll_rad_1e4,
+														 int16_t yaw_rad_1e4) {
+	attitude_.pitch_rad_1e4 = pitch_rad_1e4;
+	attitude_.roll_rad_1e4 = roll_rad_1e4;
+	attitude_.yaw_rad_1e4 = yaw_rad_1e4;
+	attitude_.valid = true;
+	attitude_.dirty = true;
+	attitude_.last_update_ms = HAL_GetTick();
+}
+
+void DevCRSF::UpdateFlightModeTelemetry(const char* mode_text) {
+	if (mode_text == nullptr) return;
+	const size_t max_copy = static_cast<size_t>(CRSF_TELEMETRY_TEXT_MAX - 1u);
+	strncpy(flight_mode_.text, mode_text, max_copy);
+	flight_mode_.text[max_copy] = '\0';
+	flight_mode_.valid = true;
+	flight_mode_.dirty = true;
+	flight_mode_.last_update_ms = HAL_GetTick();
+}
+
+void DevCRSF::SendTelemetryTick(uint32_t now_ms) {
+	if (my_huart_ == nullptr) return;
+	if (tx_busy_) return;
+
+	const uint32_t telemetry_interval_ms = 1000u / static_cast<uint32_t>(CRSF_TELEMETRY_RATE_HZ);
+	if ((now_ms - last_telemetry_tx_ms_) < telemetry_interval_ms) return;
+
+	uint8_t payload[CRSF_MAX_FRAME_LEN] = {};
+	uint8_t payload_len = 0;
+	uint8_t frame_type = 0;
+	bool built = false;
+
+	for (uint8_t attempt = 0; attempt < 3u; ++attempt) {
+		switch (telemetry_slot_) {
+			case 0:
+				built = BuildBatteryPayload(payload, payload_len);
+				frame_type = CRSF_FRAME_TYPE_BATTERY_SENSOR;
+				break;
+			case 1:
+				built = BuildAttitudePayload(payload, payload_len);
+				frame_type = CRSF_FRAME_TYPE_ATTITUDE;
+				break;
+			default:
+				built = BuildFlightModePayload(payload, payload_len);
+				frame_type = CRSF_FRAME_TYPE_FLIGHT_MODE;
+				break;
+		}
+
+		telemetry_slot_ = (telemetry_slot_ + 1u) % 3u;
+		if (built) break;
+	}
+
+	if (!built) return;
+
+	uint8_t frame_len = 0;
+	if (!BuildTelemetryFrame(frame_type, payload, payload_len, tx_buffer_, frame_len)) {
+		telemetry_drop_count_++;
+		return;
+	}
+
+	if (!StartTxFrame(tx_buffer_, frame_len)) {
+		telemetry_drop_count_++;
+		return;
+	}
+
+	last_telemetry_tx_ms_ = now_ms;
+	telemetry_sent_count_++;
+}
+
 bool DevCRSF::_DumpState(StmConsole& console, uint8_t mode) const {
 	(void)mode;
 	uint16_t crsf_ch[CRSF_CHANNELS];
@@ -146,7 +249,7 @@ bool DevCRSF::_DumpState(StmConsole& console, uint8_t mode) const {
 	int len;
 	uint8_t buf[64];
 	if (!valid) {
-		console.Send("CRSF: --\r\n", 10);
+		console.Send("CRSF: --", 8);
 	} else {
 		len = snprintf((char*)buf, sizeof(buf), "CRSF[%d]:%c ", crsf_count,
 									 (fresh ? ' ' : '~'));
@@ -159,8 +262,8 @@ bool DevCRSF::_DumpState(StmConsole& console, uint8_t mode) const {
 				break;
 			}
 		}
-		console.Send("\r\n", 2);
 	}
+  console.Send("\r\n", 2);
 	return true;
 }
 
@@ -282,6 +385,78 @@ bool DevCRSF::TryDecodeFrame(const uint8_t* frame, uint8_t total_len) {
 	channels_[14] = ((uint16_t)d[19] >> 2 | ((uint16_t)d[20] << 6)) & 0x07FF;
 	channels_[15] = ((uint16_t)d[20] >> 5 | ((uint16_t)d[21] << 3)) & 0x07FF;
 
+	return true;
+}
+
+bool DevCRSF::BuildTelemetryFrame(uint8_t frame_type, const uint8_t* payload,
+																uint8_t payload_len,
+																uint8_t* out,
+																uint8_t& out_len) const {
+	if (out == nullptr || payload == nullptr) return false;
+	const uint8_t len_field = static_cast<uint8_t>(payload_len + 2u);
+	const uint8_t total = static_cast<uint8_t>(payload_len + 4u);
+	if (total > CRSF_MAX_FRAME_LEN) return false;
+
+	out[0] = kCrsfTxAddress;
+	out[1] = len_field;
+	out[2] = frame_type;
+	memcpy(&out[3], payload, payload_len);
+	out[3 + payload_len] = Crc8DvbS2(&out[2], static_cast<uint8_t>(payload_len + 1u));
+	out_len = total;
+	return true;
+}
+
+bool DevCRSF::BuildBatteryPayload(uint8_t* payload, uint8_t& payload_len) {
+	if (payload == nullptr || !battery_.valid) return false;
+	payload[0] = static_cast<uint8_t>((battery_.voltage_cV >> 8) & 0xFFu);
+	payload[1] = static_cast<uint8_t>(battery_.voltage_cV & 0xFFu);
+	payload[2] = static_cast<uint8_t>((battery_.current_cA >> 8) & 0xFFu);
+	payload[3] = static_cast<uint8_t>(battery_.current_cA & 0xFFu);
+	payload[4] = static_cast<uint8_t>((battery_.capacity_mAh >> 16) & 0xFFu);
+	payload[5] = static_cast<uint8_t>((battery_.capacity_mAh >> 8) & 0xFFu);
+	payload[6] = static_cast<uint8_t>(battery_.capacity_mAh & 0xFFu);
+	payload[7] = battery_.remaining_pct;
+	payload_len = 8u;
+	battery_.dirty = false;
+	return true;
+}
+
+bool DevCRSF::BuildAttitudePayload(uint8_t* payload, uint8_t& payload_len) {
+	if (payload == nullptr || !attitude_.valid) return false;
+	payload[0] = static_cast<uint8_t>((attitude_.pitch_rad_1e4 >> 8) & 0xFFu);
+	payload[1] = static_cast<uint8_t>(attitude_.pitch_rad_1e4 & 0xFFu);
+	payload[2] = static_cast<uint8_t>((attitude_.roll_rad_1e4 >> 8) & 0xFFu);
+	payload[3] = static_cast<uint8_t>(attitude_.roll_rad_1e4 & 0xFFu);
+	payload[4] = static_cast<uint8_t>((attitude_.yaw_rad_1e4 >> 8) & 0xFFu);
+	payload[5] = static_cast<uint8_t>(attitude_.yaw_rad_1e4 & 0xFFu);
+	payload_len = 6u;
+	attitude_.dirty = false;
+	return true;
+}
+
+bool DevCRSF::BuildFlightModePayload(uint8_t* payload, uint8_t& payload_len) {
+	if (payload == nullptr || !flight_mode_.valid) return false;
+	const size_t max_copy = static_cast<size_t>(CRSF_TELEMETRY_TEXT_MAX - 1u);
+	const size_t text_len = strnlen(flight_mode_.text, max_copy);
+	if (text_len == 0u) return false;
+	memcpy(payload, flight_mode_.text, text_len);
+	payload[text_len] = '\0';
+	payload_len = static_cast<uint8_t>(text_len + 1u);
+	flight_mode_.dirty = false;
+	return true;
+}
+
+bool DevCRSF::StartTxFrame(const uint8_t* frame, uint8_t frame_len) {
+	if (my_huart_ == nullptr || frame == nullptr || frame_len == 0u) return false;
+	if (tx_busy_) return false;
+
+	tx_len_ = frame_len;
+	tx_busy_ = true;
+	if (HAL_UART_Transmit_IT(my_huart_, const_cast<uint8_t*>(frame), frame_len) != HAL_OK) {
+		tx_busy_ = false;
+		tx_len_ = 0;
+		return false;
+	}
 	return true;
 }
 

@@ -64,6 +64,9 @@ extern UART_HandleTypeDef huart2;
 
 #define USE_WS2812 1
 
+#define USE_CRSF_TELEMETRY 1
+#define CRSF_TELEMETRY_RATE_HZ 5u
+
 // arduino like macros
 #define millis() HAL_GetTick()  // get current ms elapsed
 #define delay(x) HAL_Delay(x)   // delay ms

@@ -24,8 +24,8 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 /** F103 - USB interface needs to be re-inserted to enumerate properly.
  *
  */
-//StmConsole console(&huart1, false); // UART
-StmConsole console(NULL, true); // USB CDC
+StmConsole console(&huart1, false); // UART
+//StmConsole console(NULL, true); // USB CDC
 
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
 DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
@@ -119,6 +119,9 @@ void main_loop(void) {
   sbus.Initialize(huart2);
 #elif USE_CRSF
   crsf.Initialize(huart2);
+#if USE_CRSF_TELEMETRY
+  crsf.UpdateFlightModeTelemetry("AUXDEV");
+#endif
 #elif USE_CPPM
   // Default CPPM target on shared PA3: TIM15_CH2.
   // Non-null port means runtime override is applied by DevCPPM.
@@ -167,6 +170,15 @@ void main_loop(void) {
 
     sys_now_ms = millis();
 
+  #if USE_CRSF && USE_CRSF_TELEMETRY
+    // Push telemetry values from app modules into CRSF store.
+    // Battery value currently uses raw ADC units as a placeholder until scaled calibration is added.
+    const uint16_t battery_cV = static_cast<uint16_t>(adc_devs[2].GetValue());
+    crsf.UpdateBatteryTelemetry(battery_cV, 0, 0, led_mode);
+    crsf.UpdateAttitudeTelemetry(0, 0, 0);
+    crsf.SendTelemetryTick(sys_now_ms);
+  #endif
+
     if (sys_now_ms - last_now_ms_ > 1000) {
       last_now_ms_ = sys_now_ms;
       count_s++;
@@ -190,7 +202,6 @@ void main_loop(void) {
           led_mode = 0;
         }
       }
-
 
       // Print all ADC values
       for (size_t i = 0; i < kNumAdcs; ++i) {
