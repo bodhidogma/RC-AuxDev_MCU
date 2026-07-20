@@ -6,12 +6,10 @@
 
 #include "WS2812FX.h"
 #include "dev_adc.hpp"
-#include "dev_cppm.hpp"
 #include "dev_crsf.hpp"
 #include "dev_led.hpp"
-#include "dev_pwm_in.hpp"
+#include "dev_button.hpp"
 #include "dev_pwm_out.hpp"
-#include "dev_sbus.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
 
@@ -27,8 +25,12 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 StmConsole console(&huart1, false);  // UART
 // StmConsole console(NULL, true); // USB CDC
 
+// blink LED on board (green) and external LED (red)
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
 DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
+
+// track button state (user button on board)
+DevButton button1(GPIOB, GPIO_PIN_0);  // User button
 
 // Multi-ADC configuration: add more entries as needed
 static const AdcConfig kAdcConfigs[] = {
@@ -41,14 +43,8 @@ extern const size_t kNumAdcs = sizeof(kAdcConfigs) / sizeof(kAdcConfigs[0]);
 DevADC adc_devs[kNumAdcs] = {DevADC(kAdcConfigs[0]), DevADC(kAdcConfigs[1]),
                              DevADC(kAdcConfigs[2])};
 
-// RC receiver PWM input capture — TIM3, 4 channels, 1 MHz tick
-DevPWMIn pwm_dev_in;
-// SBUS RC receiver input — USARTx, 100000 baud 8E2, RX-pin inverted (TAER)
-DevSBus sbus;
 // CRSF RC receiver input — USARTx, 420000 baud 8N1
 DevCRSF crsf;
-// CPPM RC receiver input — single-wire PPM sum on one TIM IC pin (AETR)
-DevCPPM cppm;
 // PWM output — TIM4, 4 channels, 1 MHz tick
 DevPWMOut pwm_dev_out;
 
@@ -91,6 +87,7 @@ void main_loop(void) {
   for (size_t i = 0; i < kNumAdcs; ++i) {
     adc_devs[i].Initialize();
   }
+  button1.Initialize();
 
 #if USE_PWM_OUT
   static const PwmOutChanConfig kPwmOutChannels[] = {
@@ -100,23 +97,13 @@ void main_loop(void) {
       {&htim2, TIM_CHANNEL_4},
   };
   pwm_dev_out.Initialize(kPwmOutChannels, 4);
-#endif
+#endif // USE_PWM_OUT
 #if USE_CRSF
   crsf.Initialize(huart2);
 #if USE_CRSF_TELEMETRY
   crsf.UpdateFlightModeTelemetry("AUXDEV");
 #endif
-#elif USE_CPPM
-  // Default CPPM target on shared PA3: TIM15_CH2.
-  // Non-null port means runtime override is applied by DevCPPM.
-  // GPIO must be configured explicitly — TIM15 MSP only sets up clock + IRQ,
-  static const CppmInputConfig kCppmConfig = {
-      &htim15,
-      TIM_CHANNEL_2,
-      {GPIOA, GPIO_PIN_3, GPIO_AF9_TIM15, GPIO_NOPULL, GPIO_SPEED_FREQ_HIGH}};
-  cppm.Initialize(&kCppmConfig, 1);
-  // cppm.Initialize(&htim2, TIM_CHANNEL_4);
-#endif
+#endif // USE_CRSF
 
 #if USE_WS2812
   ws2812_1.Initialize();
@@ -142,7 +129,7 @@ void main_loop(void) {
   ws2812fx_2.setMode(0, led_mode);
   ws2812fx_2.setOptions(0, REVERSE);
   led_mode++;
-#endif
+#endif // USE_WS2812
 
   led0.SetPattern(DevLED::BLINK1);
   led1.SetPattern(DevLED::BLINK3);
@@ -162,8 +149,9 @@ void main_loop(void) {
     crsf.UpdateBatteryTelemetry(battery_cV, 0, 0, led_mode);
     crsf.UpdateAttitudeTelemetry(0, 0, 0);
     crsf.SendTelemetryTick(sys_now_ms);
-#endif
+#endif // USE_CRSF && USE_CRSF_TELEMETRY
 
+    // -- do something every 1s
     if (sys_now_ms - last_now_ms_ > 1000) {
       last_now_ms_ = sys_now_ms;
       count_s++;
@@ -182,11 +170,15 @@ void main_loop(void) {
         ws2812fx_1.setMode(0, led_mode);
         ws2812fx_2.setMode(0, led_mode);
         led_mode++;
-#endif
+#endif // USE_WS2812
         if (led_mode > FX_MODE_RAIN) {
           led_mode = 0;
         }
       }
+
+      // print button state
+      snprintf((char*)buf, sizeof(buf), "b1= %d ", button1.IsPressed() ? 1 : 0);
+      console.Send((const char*)buf, strlen((const char*)buf));
 
       // Print all ADC values
       for (size_t i = 0; i < kNumAdcs; ++i) {
@@ -198,8 +190,12 @@ void main_loop(void) {
 #if USE_CRSF                        // Print CRSF status (first 4 channels)
       //crsf._DumpState(console, 0);  // for debugging
 #endif
+
+      // print EOL
+      console.Send(NL, 2);
     }
 
+    // update PWM output from CRSF input (if available)
 #if USE_PWM_OUT
     uint16_t servo_pos = 0;
     bool fresh = false, valid = false;
@@ -216,8 +212,8 @@ void main_loop(void) {
       }
       // pwm = 1000 + (crsf - 172) * (2000-1000) / (1811-172)
     }
-#endif
-#endif
+#endif // USE_CRSF
+#endif // USE_PWM_OUT
 
     console.Update();
     led0.Update();
@@ -227,7 +223,7 @@ void main_loop(void) {
 #if USE_WS2812
     ws2812fx_1.service();
     ws2812fx_2.service();
-#endif
+#endif // USE_WS2812
 
     if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
       usb_connected = true;

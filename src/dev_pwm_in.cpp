@@ -19,6 +19,8 @@
 
 #include "stm_hal_shims.hpp"
 
+#ifdef USE_PWM_IN
+
 // Reference to the global instance defined in mymain.cpp
 extern DevPWMIn pwm_dev_in;
 
@@ -213,3 +215,5 @@ bool DevPWMIn::_DumpState(StmConsole &console, uint8_t mode) const {
 #endif
   return true;
 }
+
+#endif  // USE_PWM_IN

@@ -20,6 +20,8 @@
 
 #include "stm_hal_shims.hpp"
 
+#ifdef USE_SBUS
+
 // Forward declaration — global instance defined in mymain.cpp
 extern DevSBus sbus;
 
@@ -284,3 +286,5 @@ void DevSBus::DecodeFrame(void) {
 
   flags_ = rx_buffer_[23];
 }
+
+#endif // USE_SBUS

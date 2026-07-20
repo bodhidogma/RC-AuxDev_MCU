@@ -20,6 +20,8 @@
 
 #include "stm_hal_shims.hpp"
 
+#ifdef USE_CPPM
+
 // Forward declaration — global instance defined in mymain.cpp
 extern DevCPPM cppm;
 
@@ -227,3 +229,5 @@ bool DevCPPM::_DumpState(StmConsole& console, uint8_t mode) const {
 #endif  
   return true;
 }
+
+#endif  // USE_CPPM

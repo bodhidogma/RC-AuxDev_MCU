@@ -263,7 +263,7 @@ bool DevCRSF::_DumpState(StmConsole& console, uint8_t mode) const {
 			}
 		}
 	}
-  console.Send("\r\n", 2);
+  // console.Send("\r\n", 2);
 	return true;
 }
 

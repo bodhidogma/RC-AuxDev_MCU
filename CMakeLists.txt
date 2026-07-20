@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stm_console.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_led.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_adc.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_button.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_out.cpp
     # RC receiver input sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_in.cpp
