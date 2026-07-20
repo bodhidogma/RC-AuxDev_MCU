@@ -256,7 +256,7 @@ bool DevCRSF::_DumpState(StmConsole& console, uint8_t mode) const {
 		console.Send((const char*)buf, len);
 		for (int ch = 0; ch < crsf_count; ch++) {
 			len =
-					snprintf((char*)buf, sizeof(buf), "(%d) %4u\t", ch + 1, crsf_ch[ch]);
+					snprintf((char*)buf, sizeof(buf), "%d= %4u ", ch + 1, crsf_ch[ch]);
 			console.Send((const char*)buf, len);
 			if (crsf_ch[ch] == 0) {
 				break;
