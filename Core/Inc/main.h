@@ -61,8 +61,8 @@ void Error_Handler(void);
 #define LED_G_GPIO_Port GPIOC
 #define LED_R_Pin GPIO_PIN_14
 #define LED_R_GPIO_Port GPIOC
-#define I_VBUS_SENS_Pin GPIO_PIN_15
-#define I_VBUS_SENS_GPIO_Port GPIOC
+#define I_VBUS_DET_Pin GPIO_PIN_15
+#define I_VBUS_DET_GPIO_Port GPIOC
 #define A11_IGNITER_SENS_Pin GPIO_PIN_0
 #define A11_IGNITER_SENS_GPIO_Port GPIOA
 #define T2C2_PWMIO2_Pin GPIO_PIN_1

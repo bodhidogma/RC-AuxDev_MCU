@@ -7,8 +7,8 @@
 #include "WS2812FX.h"
 #include "dev_adc.hpp"
 #include "dev_crsf.hpp"
+#include "dev_gpio.hpp"
 #include "dev_led.hpp"
-#include "dev_button.hpp"
 #include "dev_pwm_out.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
@@ -29,14 +29,16 @@ StmConsole console(&huart1, false);  // UART
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);
 DevLED led1(LED_R_GPIO_Port, LED_R_Pin);
 
-// track button state (user button on board)
-DevButton button1(GPIOB, GPIO_PIN_0);  // User button
+// track GPIO Input state(s)
+DevGpioPin button1(GPIOB, GPIO_PIN_0, true, true);  // (PB0) User button
+DevGpioPin usb_detect(GPIOC, GPIO_PIN_15, true);    // (PC15) USB VBUS detect
+DevGpioPin igniter(GPIOB, GPIO_PIN_2, false);       // (PB2) Igniter output
 
 // Multi-ADC configuration: add more entries as needed
 static const AdcConfig kAdcConfigs[] = {
     {&hadc1, ADC_CHANNEL_TEMPSENSOR, true},  // Internal temp sensor
-    {&hadc1, ADC_CHANNEL_1, false},          // A1.1 - igniter
-    {&hadc3, ADC_CHANNEL_1, false},          // A3.1 - battery voltage
+    {&hadc1, ADC_CHANNEL_1, false},          // A1.1 (PA0) - igniter
+    {&hadc3, ADC_CHANNEL_1, false},          // A3.1 (PB1) - battery voltage
 };
 
 extern const size_t kNumAdcs = sizeof(kAdcConfigs) / sizeof(kAdcConfigs[0]);
@@ -88,6 +90,9 @@ void main_loop(void) {
     adc_devs[i].Initialize();
   }
   button1.Initialize();
+  usb_detect.Initialize();
+  igniter.Initialize();
+  igniter.SetOutputState(false);  // ensure igniter is off
 
 #if USE_PWM_OUT
   static const PwmOutChanConfig kPwmOutChannels[] = {
@@ -97,13 +102,13 @@ void main_loop(void) {
       {&htim2, TIM_CHANNEL_4},
   };
   pwm_dev_out.Initialize(kPwmOutChannels, 4);
-#endif // USE_PWM_OUT
+#endif  // USE_PWM_OUT
 #if USE_CRSF
   crsf.Initialize(huart2);
 #if USE_CRSF_TELEMETRY
   crsf.UpdateFlightModeTelemetry("AUXDEV");
 #endif
-#endif // USE_CRSF
+#endif  // USE_CRSF
 
 #if USE_WS2812
   ws2812_1.Initialize();
@@ -129,7 +134,7 @@ void main_loop(void) {
   ws2812fx_2.setMode(0, led_mode);
   ws2812fx_2.setOptions(0, REVERSE);
   led_mode++;
-#endif // USE_WS2812
+#endif  // USE_WS2812
 
   led0.SetPattern(DevLED::BLINK1);
   led1.SetPattern(DevLED::BLINK3);
@@ -149,7 +154,7 @@ void main_loop(void) {
     crsf.UpdateBatteryTelemetry(battery_cV, 0, 0, led_mode);
     crsf.UpdateAttitudeTelemetry(0, 0, 0);
     crsf.SendTelemetryTick(sys_now_ms);
-#endif // USE_CRSF && USE_CRSF_TELEMETRY
+#endif  // USE_CRSF && USE_CRSF_TELEMETRY
 
     // -- do something every 1s
     if (sys_now_ms - last_now_ms_ > 1000) {
@@ -170,14 +175,23 @@ void main_loop(void) {
         ws2812fx_1.setMode(0, led_mode);
         ws2812fx_2.setMode(0, led_mode);
         led_mode++;
-#endif // USE_WS2812
+#endif  // USE_WS2812
         if (led_mode > FX_MODE_RAIN) {
           led_mode = 0;
         }
       }
 
-      // print button state
-      snprintf((char*)buf, sizeof(buf), "b1= %d ", button1.IsPressed() ? 1 : 0);
+      // update igniter state (for testing)
+      if (button1.IsEnabled()) {
+        igniter.SetOutputState(true);
+      } else {
+        igniter.SetOutputState(false);
+      }
+
+      // print GPIO state(s)
+      snprintf((char*)buf, sizeof(buf), "b1= %d u= %d i= %d ",
+               button1.IsEnabled() ? 1 : 0, usb_detect.IsEnabled() ? 1 : 0,
+               igniter.IsEnabled() ? 1 : 0);
       console.Send((const char*)buf, strlen((const char*)buf));
 
       // Print all ADC values
@@ -187,8 +201,8 @@ void main_loop(void) {
         console.Send((const char*)buf, strlen((const char*)buf));
       }
 
-#if USE_CRSF                        // Print CRSF status (first 4 channels)
-      //crsf._DumpState(console, 0);  // for debugging
+#if USE_CRSF  // Print CRSF status (first 4 channels)
+              // crsf._DumpState(console, 0);  // for debugging
 #endif
 
       // print EOL
@@ -212,8 +226,8 @@ void main_loop(void) {
       }
       // pwm = 1000 + (crsf - 172) * (2000-1000) / (1811-172)
     }
-#endif // USE_CRSF
-#endif // USE_PWM_OUT
+#endif  // USE_CRSF
+#endif  // USE_PWM_OUT
 
     console.Update();
     led0.Update();
@@ -223,7 +237,7 @@ void main_loop(void) {
 #if USE_WS2812
     ws2812fx_1.service();
     ws2812fx_2.service();
-#endif // USE_WS2812
+#endif  // USE_WS2812
 
     if (usb_connected == false and hUsbDeviceFS.pClassData != 0) {
       usb_connected = true;

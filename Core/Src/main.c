@@ -911,11 +911,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : I_VBUS_SENS_Pin */
-  GPIO_InitStruct.Pin = I_VBUS_SENS_Pin;
+  /*Configure GPIO pin : I_VBUS_DET_Pin */
+  GPIO_InitStruct.Pin = I_VBUS_DET_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(I_VBUS_SENS_GPIO_Port, &GPIO_InitStruct);
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(I_VBUS_DET_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : I_BUTTON_Pin */
   GPIO_InitStruct.Pin = I_BUTTON_Pin;
@@ -926,7 +926,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : O_LAUNCH_TRIG_Pin */
   GPIO_InitStruct.Pin = O_LAUNCH_TRIG_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(O_LAUNCH_TRIG_GPIO_Port, &GPIO_InitStruct);
 

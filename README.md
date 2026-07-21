@@ -25,3 +25,22 @@ STLINK tool:
 * flash: `st-flash --debug --format ihex write build/Debug/RC-AuxDev_MCU.hex`
 
 # App
+
+Supported features:
+* [x] IN adc temp (adc0)
+* [x] IN adc vbat sense
+* [x] IN adc igniter sense
+* [x] IN user SPST button
+* [x] IN adc igniter sense
+* [x] IN usb-vbus detect
+* [x] OUT launch trigger
+* [x] JMP EN lanch-firig
+* [x] JMP EN BAT power ON
+* [x] OUT PWM 4CH
+* [x] OUT SPI-WS2812 LED x2
+* [x] IN RC ELRS RX
+* [x] OUT RC ELSX TX
+* [ ] IN pressure sense
+* [ ] IN 6x gyro
+* [ ] 
+ 
