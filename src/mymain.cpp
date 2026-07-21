@@ -15,6 +15,7 @@
 #include "dev_pwm_out.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
+#include "dev_msp_handler.hpp"
 
 // global objects
 
@@ -27,6 +28,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
  */
 StmConsole console(&huart1, false);  // UART
 // StmConsole console(NULL, true); // USB CDC
+MspHandler msp;  // MSP command handler (USB CDC)
 
 // blink LED on board (green) and external LED (red)
 DevLED led0(LED_G_GPIO_Port, LED_G_Pin);

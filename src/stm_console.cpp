@@ -16,11 +16,13 @@ https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
 // external objects
 
 #include "dev_led.hpp"
+#include "dev_msp_handler.hpp"
 
 extern DevLED led0;
 extern DevLED led1;
 extern DevCRSF crsf;
 // extern DevSBus sbus;
+extern MspHandler msp;
 
 // global uart rx buffer
 uint8_t console_uart_rx_buffer_[1];
@@ -262,9 +264,13 @@ extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
  */
 extern "C" void USBD_CDC_RxCpltCallback(uint8_t* buf, uint32_t len) {
   // do something with USB UART data
-  do {
-    console.update_rx_buffer(*(buf++));
-  } while (--len);
+  for (uint32_t i = 0; i < len; ++i) {
+#if 0  
+    console.update_rx_buffer(buf[i]);
+#else
+    msp.processByte(buf[i]);
+#endif
+  }
 }
 
 /** USB CDC TX complete callback
