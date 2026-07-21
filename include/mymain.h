@@ -24,9 +24,9 @@ void main_loop();
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc3;
 
-//extern CRC_HandleTypeDef hcrc;
+extern CRC_HandleTypeDef hcrc;
 
-//extern I2C_HandleTypeDef hi2c1;
+extern I2C_HandleTypeDef hi2c1;
 //extern I2C_HandleTypeDef hi2c2;
 
 //extern RTC_HandleTypeDef hrtc;
@@ -58,6 +58,9 @@ extern UART_HandleTypeDef huart2;
 #define USE_CRSF 1
 #define USE_CRSF_TELEMETRY 1
 #define CRSF_TELEMETRY_RATE_HZ 5u
+
+#define USE_MS5611_BARO 1
+#define USE_MPU6050_IMU 1
 
 // arduino like macros
 #define millis() HAL_GetTick()  // get current ms elapsed

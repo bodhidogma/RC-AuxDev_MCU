@@ -10,6 +10,8 @@
 #include "dev_gpio.hpp"
 #include "dev_led.hpp"
 #include "dev_pwm_out.hpp"
+#include "dev_baro_ms5611.hpp"
+//#include "dev_imu_mpu6050.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
 
@@ -59,6 +61,9 @@ DevWS2812 ws2812_2(&hspi3);
 WS2812FX ws2812fx_1(DevWS2812::kMaxLed, 0, 0);
 WS2812FX ws2812fx_2(DevWS2812::kMaxLed, 0, 0);
 
+// pressure sensor (MS5611) on I2C1 (PB6=SCL, PB7=SDA)
+DevMS5611 ms5611(&hi2c1);  // MS5611
+
 static uint32_t sys_now_ms = 0;
 static uint32_t count_s = 0;
 uint8_t led_mode = 1;
@@ -93,6 +98,12 @@ void main_loop(void) {
   usb_detect.Initialize();
   igniter.Initialize();
   igniter.SetOutputState(false);  // ensure igniter is off
+
+#if USE_MS5611_BARO  
+  if (!ms5611.begin()) {
+    console.Send("MS5611 init failed\r\n", 20);
+  }
+#endif
 
 #if USE_PWM_OUT
   static const PwmOutChanConfig kPwmOutChannels[] = {
@@ -205,6 +216,13 @@ void main_loop(void) {
               // crsf._DumpState(console, 0);  // for debugging
 #endif
 
+#if USE_MS5611_BARO
+      // Print MS5611 pressure and temperature
+      ms5611.read();
+      snprintf((char*)buf, sizeof(buf), "P= %.2f T= %.2f ", ms5611.getPressure(),
+               ms5611.getTemperature());
+      console.Send((const char*)buf, strlen((const char*)buf));
+#endif
       // print EOL
       console.Send(NL, 2);
     }
