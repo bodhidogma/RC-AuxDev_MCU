@@ -54,6 +54,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_out.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_baro_ms5611.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_imu_mpu6050.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_flash.cpp
     # RC receiver input sources
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_pwm_in.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dev_sbus.cpp

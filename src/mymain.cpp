@@ -6,12 +6,13 @@
 
 #include "WS2812FX.h"
 #include "dev_adc.hpp"
+#include "dev_baro_ms5611.hpp"
 #include "dev_crsf.hpp"
+#include "dev_flash.hpp"
 #include "dev_gpio.hpp"
+#include "dev_imu_mpu6050.hpp"
 #include "dev_led.hpp"
 #include "dev_pwm_out.hpp"
-#include "dev_baro_ms5611.hpp"
-#include "dev_imu_mpu6050.hpp"
 #include "dev_ws2812.hpp"
 #include "stm_console.hpp"
 
@@ -89,6 +90,8 @@ void main_loop(void) {
   HAL_UART_Transmit_IT(&huart1, buffer, sizeof(buffer));
   HAL_Delay(100);
 
+  DevFlash flash(CONFIG_FLASH_PAGE_ADDR);
+
   // disable stdio buffering
   setbuf(stdout, NULL);
 
@@ -102,17 +105,37 @@ void main_loop(void) {
   igniter.Initialize();
   igniter.SetOutputState(false);  // ensure igniter is off
 
-#if USE_MS5611_BARO  
+#if USE_MS5611_BARO
   if (!ms5611.begin()) {
     console.Send("MS5611 init failed\r\n", 20);
   }
 #endif
 #if USE_MPU6050_IMU
-  if (!mpu6050.begin(DevMPU6050::GyroScale::FS_512, DevMPU6050::AccelScale::FS_4G)) {
+  if (!mpu6050.begin(DevMPU6050::GyroScale::FS_512,
+                     DevMPU6050::AccelScale::FS_4G)) {
     console.Send("MPU6050 init failed\r\n", 22);
   }
 #endif
 
+#if 1  // FLASH
+  uint32_t dataToWrite[3] = {0xDEADBEEF, 0x12345678, 0xAAAA5555};
+  uint32_t dataToRead[3] = {0};
+
+  flash.readWords(dataToRead, 3);
+  snprintf((char*)buf, sizeof(buf), "Read back: 0x%08X 0x%08X 0x%08X\r\n",
+           dataToRead[0], dataToRead[1], dataToRead[2]);
+  console.Send((const char*)buf, strlen((const char*)buf));
+
+  if (dataToRead[0] != 0xDEADBEEF && flash.erasePage()) {
+    console.Send("Flash page erased\r\n", 20);
+
+    if (flash.writeWords(dataToWrite, 3)) {
+      console.Send("Flash write successful\r\n", 25);
+    } else {
+      console.Send("Flash write failed\r\n", 22);
+    }
+  }
+#endif
 
 #if USE_PWM_OUT
   static const PwmOutChanConfig kPwmOutChannels[] = {
@@ -228,19 +251,20 @@ void main_loop(void) {
 #if USE_MS5611_BARO
       // Print MS5611 pressure and temperature
       if (ms5611.read()) {
-        snprintf((char*)buf, sizeof(buf), "P= %.2f T= %.2f ", ms5611.getPressure(),
-                 ms5611.getTemperature());
+        snprintf((char*)buf, sizeof(buf), "P= %.2f T= %.2f ",
+                 ms5611.getPressure(), ms5611.getTemperature());
         console.Send((const char*)buf, strlen((const char*)buf));
       }
 #endif
 #if USE_MPU6050_IMU
       if (mpu6050.read()) {
         snprintf((char*)buf, sizeof(buf), "aX= %.2f gZ= %.2f T= %.2f ",
-                 mpu6050.getAccX(), mpu6050.getGyroZ(), mpu6050.getTemperature());
+                 mpu6050.getAccX(), mpu6050.getGyroZ(),
+                 mpu6050.getTemperature());
         console.Send((const char*)buf, strlen((const char*)buf));
       }
 #endif
-// print EOL
+      // print EOL
       console.Send(NL, 2);
     }
 
