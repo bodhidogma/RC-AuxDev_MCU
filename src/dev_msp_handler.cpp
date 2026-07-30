@@ -1,5 +1,22 @@
 /**
+ * MSP:
+ * - https://betaflight.com/docs/development/MSP-Protocol-Reference-Dev
+ * -
+ * https://github.com/DroneWuKong/drone-integration-handbook/blob/main/firmware/msp-protocol.md
  *
+ * Typical MSP protocol loop:
+ *
+ * Host (configurator) sends init sequence to client (flight controller):
+ *  -> 1, 2, 3, 5, 4, 101, 106
+ *
+ *
+ * 1. Connection Initialization: API Handshake
+ * 2. Firmware Variant Name Identification
+ * 3. Firmware Generation Version Release Target
+ * 4. Structural Hardware Platform Identifier
+ * 5. Silicon UUID Verification Tracking
+ * 6. Base Runtime State Metrics
+ * 7. Unique Device Identifier for the Flight Controller
  */
 
 #include "dev_msp_handler.hpp"
@@ -14,10 +31,10 @@ extern StmConsole console;
 
 MspHandler::MspHandler()
     : _state(State::WAIT_START),
-      _payloadSize(0),
-      _cmd(0),
-      _payloadIndex(0),
-      _checksum(0) {}
+      payload_size_(0),
+      cmd_(0),
+      payload_index_(0),
+      checksum_(0) {}
 
 void MspHandler::processByte(uint8_t byte) {
   switch (_state) {
@@ -36,16 +53,16 @@ void MspHandler::processByte(uint8_t byte) {
       break;
 
     case State::READ_SIZE:
-      _payloadSize = byte;
-      _checksum = byte;  // Checksum resets and starts XOR calculation with size
-      _payloadIndex = 0;
+      payload_size_ = byte;
+      checksum_ = byte;  // Checksum resets and starts XOR calculation with size
+      payload_index_ = 0;
       _state = State::READ_CMD;
       break;
 
     case State::READ_CMD:
-      _cmd = byte;
-      _checksum ^= byte;
-      if (_payloadSize == 0) {
+      cmd_ = byte;
+      checksum_ ^= byte;
+      if (payload_size_ == 0) {
         _state = State::READ_CRC;
       } else {
         _state = State::READ_PAYLOAD;
@@ -53,17 +70,22 @@ void MspHandler::processByte(uint8_t byte) {
       break;
 
     case State::READ_PAYLOAD:
-      _rxBuffer[_payloadIndex++] = byte;
-      _checksum ^= byte;
-      if (_payloadIndex >= _payloadSize) {
+      rx_buffer_[payload_index_++] = byte;
+      checksum_ ^= byte;
+      if (payload_index_ >= payload_size_) {
         _state = State::READ_CRC;
       }
       break;
 
     case State::READ_CRC:
-      if (byte == _checksum) {
-        // console.Send("MSP: CRC OK\r\n", 13);
-        handleCommand(_cmd);  // CRC Verified! Execute command logic.
+      if (byte == checksum_) {
+        if (1) {
+          int len;
+          static uint8_t buf[64];
+          len = snprintf((char*)buf, sizeof(buf), "MSP:%d \r\n", cmd_);
+          console.Send((const char*)buf, len);
+        }
+        handleCommand(cmd_);  // CRC Verified! Execute command logic.
       }
       _state = State::WAIT_START;
       break;
@@ -71,179 +93,142 @@ void MspHandler::processByte(uint8_t byte) {
 }
 
 void MspHandler::handleCommand(uint8_t cmd) {
-    switch (cmd) {
-        
-        // 1. Connection Initialization: API Handshake
-        case 1: { // MSP_API_VERSION
-            struct __attribute__((packed)) MspApiVersionResponse {
-                uint8_t mspProtocolVersion = 0; 
-                uint8_t apiVersionMajor = 1;    
-                uint8_t apiVersionMinor = 45;   // Modern Configurator safe API level
-            } apiPacket;
-            sendPacket(1, reinterpret_cast<uint8_t*>(&apiPacket), sizeof(apiPacket));
-            break;
-        }
-
-        // 2. Firmware Variant Name Identification
-        case 2: { // MSP_FC_VARIANT
-            uint8_t variantPacket[4] = {'B', 'T', 'F', 'L'}; // Locks into Betaflight layout expectations
-            sendPacket(2, variantPacket, 4);
-            break;
-        }
-
-        // 3. Firmware Generation Version Release Target
-        case 3: { // MSP_FC_VERSION
-            struct __attribute__((packed)) MspFcVersionResponse {
-                uint8_t versionMajor = 4;
-                uint8_t versionMinor = 5;
-                uint8_t versionPatch = 0;
-            } versionPacket;
-            sendPacket(3, reinterpret_cast<uint8_t*>(&versionPacket), sizeof(versionPacket));
-            break;
-        }
-
-        // 4. Structural Hardware Platform Identifier
-        case 4: { // MSP_BOARD_INFO
-            struct __attribute__((packed)) MspBoardInfoResponse {
-                uint8_t boardIdentifier[4] = {'S', 'T', 'M', '3'}; 
-                uint16_t hardwareRevision = 0;
-                uint8_t targetType = 0; 
-            } boardPacket;
-            sendPacket(4, reinterpret_cast<uint8_t*>(&boardPacket), sizeof(boardPacket));
-            break;
-        }
-
-        // 5. Silicon UUID Verification Tracking 
-        case 5: { // MSP_UID
-            struct __attribute__((packed)) MspUidResponse {
-                uint32_t uid[3] = {0x12345678, 0x9ABCDEF0, 0x00112233}; 
-            } uidPacket;
-            sendPacket(5, reinterpret_cast<uint8_t*>(&uidPacket), sizeof(uidPacket));
-            break;
-        }
-
-        // 6. Base Runtime State Metrics
-        case 101: { // MSP_STATUS
-            struct __attribute__((packed)) MspStatusResponse {
-                uint16_t cycleTime = 200;      
-                uint16_t i2cErrorCounter = 0;
-                uint16_t sensorFlags = 0x03;   // Forces Accel (0x01) and Gyro (0x02) online
-                uint32_t flightModeFlags = 0;  
-                uint8_t  profileIndex = 0;
-            } statusPacket;
-            sendPacket(101, reinterpret_cast<uint8_t*>(&statusPacket), sizeof(statusPacket));
-            break;
-        }
-
-        // 7. NEW REQUIRED PARAM: Flight Controller Basic Configuration Data
-        case 105: { // MSP_FC_CONFIG
-            struct __attribute__((packed)) MspFcConfigResponse {
-                uint8_t rxConfigurationIndex = 0;
-                uint8_t serialRxProviderIndex = 0;
-                uint8_t activeMainConfigProfile = 0;
-                uint8_t activeSecondaryRateProfile = 0;
-            } fcConfigPacket;
-            sendPacket(105, reinterpret_cast<uint8_t*>(&fcConfigPacket), sizeof(fcConfigPacket));
-            break;
-        }
-
-        // 8. CRITICAL: Mixer Configuration Profile (Missing this drops connection)
-        case 106: { // MSP_MIXER
-            struct __attribute__((packed)) MspMixerResponse {
-                uint8_t mixerMode = 3; // QUADX Mixer mode layout template designation
-                uint8_t reversedMotors = 0;
-            } mixerPacket;
-            sendPacket(106, reinterpret_cast<uint8_t*>(&mixerPacket), sizeof(mixerPacket));
-            break;
-        }
-
-        // 9. CRITICAL: Multi-Receiver Channel Allocation Definition
-        case 108: { // MSP_RX_CONFIG
-            struct __attribute__((packed)) MspRxConfigResponse {
-                uint8_t serialrx_provider = 0;
-                uint16_t maxcheck = 1900;
-                uint16_t midrc = 1500;
-                uint16_t mincheck = 1100;
-                uint8_t spektrum_sat_bind = 0;
-                uint16_t rx_min_usec = 885;
-                uint16_t rx_max_usec = 2115;
-                uint8_t rcInterpolation = 0;
-                uint8_t rcInterpolationInterval = 0;
-                uint16_t airModeActivateThreshold = 1320;
-                uint8_t rx_spi_protocol = 0;
-                uint32_t rx_spi_id = 0;
-                uint8_t rx_spi_rf_channel_count = 0;
-                uint8_t fpvCamOnboardControlChannel = 0;
-            } rxConfigPacket;
-            sendPacket(108, reinterpret_cast<uint8_t*>(&rxConfigPacket), sizeof(rxConfigPacket));
-            break;
-        }
-
-        // 10. CRITICAL: PID Controller Constants Array
-        case 112: { // MSP_PID
-            // Provide a basic 30-byte dummy array representing standard P, I, and D parameters
-            uint8_t pidPacket[30] = {0}; 
-            sendPacket(112, pidPacket, 30);
-            break;
-        }
-
-        // 11. Core Feature Profile Definition
-        case 116: { // MSP_FEATURE_CONFIG
-            uint32_t activeFeaturesMask = 0x00000001; 
-            sendPacket(116, reinterpret_cast<uint8_t*>(&activeFeaturesMask), 4);
-            break;
-        }
-
-        // 12. Mode Management / Arming Channel Allocations
-        case 119: { // MSP_BOXIDS
-            uint8_t boxIdsPacket[] = {0, 1, 2}; 
-            sendPacket(119, boxIdsPacket, sizeof(boxIdsPacket));
-            break;
-        }
-
-        // 13. System Safety Profile Data
-        case 121: { // MSP_ARMING_CONFIG
-            struct __attribute__((packed)) MspArmingConfigResponse {
-                uint8_t auto_disarm_delay = 0;
-                uint8_t angle_max_limit = 25; 
-                uint8_t cap_flags = 0;
-            } armingPacket;
-            sendPacket(121, reinterpret_cast<uint8_t*>(&armingPacket), sizeof(armingPacket));
-            break;
-        }
-
-        default:
-            // Fallback acknowledgment loop tells the parser the feature field is clear/empty
-            sendPacket(cmd, nullptr, 0);
-            break;
+  switch (cmd) {
+    // 1. Connection Initialization: API Handshake
+    case 1: {  // MSP_API_VERSION (3b)
+      struct __attribute__((packed)) MspApiVersionResponse {
+        uint8_t mspProtocolVersion = 0;
+        uint8_t apiVersionMajor = 1;
+        uint8_t apiVersionMinor = 44;  // Modern Configurator safe API level
+      } apiPacket;
+      sendPacket(1, reinterpret_cast<uint8_t*>(&apiPacket), sizeof(apiPacket));
+      break;
     }
+
+    // 2. Firmware Variant Name Identification
+    case 2: {  // MSP_FC_VARIANT (null term)
+      uint8_t variantPacket[4] = {
+          'B', 'T', 'F', 'L'};  // Locks into Betaflight layout expectations
+      sendPacket(2, variantPacket, 4);
+      break;
+    }
+
+    // 3. Firmware Generation Version Release Target
+    case 3: {  // MSP_FC_VERSION (3b + null term)
+      struct __attribute__((packed)) MspFcVersionResponse {
+        uint8_t major = 4;
+        uint8_t minor = 4;
+        uint8_t patch = 0;
+        uint8_t str[5] = {'H', 'B', 'R', 'O', '\0'};
+      } versionPacket;
+      sendPacket(3, reinterpret_cast<uint8_t*>(&versionPacket),
+                 sizeof(versionPacket));
+      break;
+    }
+
+    // 5. Structural Hardware Platform Identifier
+    case 4: {  // MSP_BOARD_INFO
+      struct __attribute__((packed)) MspBoardInfoResponse {
+        uint8_t boardIdentifier[4] = {'H', 'B', 'R', 'O'};
+        uint16_t hardwareRevision = 0;
+        uint8_t osdType = 0;
+        uint8_t multiwiiCapabilities = 0;
+        uint8_t targetNameLength = 10;
+        uint8_t targetName[11] = {'K', 'A', 'K', 'U', 'T', 'E', 'F', '4', 'V', '2', '\0'};
+      } boardPacket;
+      sendPacket(4, reinterpret_cast<uint8_t*>(&boardPacket),
+                 sizeof(boardPacket));
+      break;
+    }
+
+    // 4. Build Information / Firmware Generation Metadata
+    case 5: {  // MSP_BUILD_INFO
+      struct __attribute__((packed)) MspBuildInfoResponse {
+        uint8_t buildDate[11] = {'2', '0', '2', '4', '-', '0', '6', '-', '1',
+                                 '5', '\0'};
+        uint8_t buildTime[9] = {'1', '2', ':', '3', '0', ':', '0', '0', '\0'};
+        uint8_t gitHash[7] = {'a', 'b', 'c', 'd', 'e', 'f', '\0'};
+        
+      } buildInfoPacket;
+      sendPacket(5, reinterpret_cast<uint8_t*>(&buildInfoPacket), sizeof(buildInfoPacket));
+      break;
+    }
+
+    // 6. Base Runtime State Metrics
+    case 101: {  // MSP_STATUS
+      struct __attribute__((packed)) MspStatusResponse {
+        uint16_t cycleTime = 200;
+        uint16_t i2cErrorCounter = 0;
+        uint16_t sensorFlags =
+            0x03;  // Forces Accel (0x01) and Gyro (0x02) online
+        uint32_t flightModeFlags = 0;
+        uint8_t profileIndex = 0;
+      } statusPacket;
+      sendPacket(101, reinterpret_cast<uint8_t*>(&statusPacket),
+                 sizeof(statusPacket));
+      break;
+    }
+
+    // 7. unique device identifier for the flight controller
+    case 160: {  // MSP_UID
+      struct __attribute__((packed)) MspUidResponse {
+        uint32_t uid[3] = {0x12345678, 0x9ABCDEF0, 0x00112233};
+      } uidPacket;
+      sendPacket(160, reinterpret_cast<uint8_t*>(&uidPacket),
+                 sizeof(uidPacket));
+      break;
+    }
+
+    // 10, 99, 246, 36, 32, 80, 70, 79, 240
+    // 150, 110, 130, 116
+
+    // MSP_FEATURE_CONFIG (36)
+    // MSP_MIXER_CONFIG (42)
+    // MSP_BOXNAMES (116)
+    // MSP_PIDNAMES (117)
+
+    // MSP_FC_RESOURCES (61)
+    // MSP_SETTINGS_INFO (62)
+    // MSP_DATA_FLASH_SUMMARY (70)
+
+    // MSP_RC_TUNING (111)
+    // MSP_PID (112)
+
+    default:
+      // Fallback acknowledgment loop tells the parser the feature field is
+      // clear/empty
+      sendPacket(cmd, nullptr, 0);
+      break;
+  }
 }
 
 void MspHandler::sendPacket(uint8_t cmd, const uint8_t* payload, uint8_t size) {
-    // Maximum MSP V1 size is 5 header bytes + 255 payload bytes + 1 CRC byte = 261 bytes
-    uint8_t txBuffer[265]; 
-    
-    txBuffer[0] = '$';
-    txBuffer[1] = 'M';
-    txBuffer[2] = '>';
-    txBuffer[3] = size;
-    txBuffer[4] = cmd;
+  // Maximum MSP V1 size is 5 header bytes + 255 payload bytes + 1 CRC byte =
+  // 261 bytes
 
-    uint8_t calcCrc = size ^ cmd;
+  tx_buffer_[0] = '$';
+  tx_buffer_[1] = 'M';
+  tx_buffer_[2] = '>';
+  tx_buffer_[3] = size;
+  tx_buffer_[4] = cmd;
 
-    for (uint8_t i = 0; i < size; ++i) {
-        txBuffer[5 + i] = payload[i];
-        calcCrc ^= payload[i];
-    }
+  uint8_t calcCrc = size ^ cmd;
 
-    txBuffer[5 + size] = calcCrc;
+  for (uint8_t i = 0; i < size; ++i) {
+    tx_buffer_[5 + i] = payload[i];
+    calcCrc ^= payload[i];
+  }
 
-    // Send the complete, continuous packet frame layout down the USB line as ONE bundle.
-    // This stops Windows/Linux serial drivers from misinterpreting raw byte separations.
-    CDC_Transmit_FS(txBuffer, 6 + size);
-    
-    // Give the hardware serial stack endpoints a brief moment to settle if processing quickly
-    HAL_Delay(1); 
+  tx_buffer_[5 + size] = calcCrc;
+
+  // Send the complete, continuous packet frame layout down the USB line as ONE
+  // bundle. This stops Windows/Linux serial drivers from misinterpreting raw
+  // byte separations.
+  CDC_Transmit_FS(tx_buffer_, 6 + size);
+
+  // Give the hardware serial stack endpoints a brief moment to settle if
+  // processing quickly
+  // HAL_Delay(1);
 }
 
 void MspHandler::sendImuData(float ax, float ay, float az, float gx, float gy,

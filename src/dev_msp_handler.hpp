@@ -28,11 +28,15 @@ private:
     enum class State { WAIT_START, WAIT_M, WAIT_ARROW, READ_SIZE, READ_CMD, READ_PAYLOAD, READ_CRC };
     State _state;
 
-    uint8_t _rxBuffer[64];
-    uint8_t _payloadSize;
-    uint8_t _cmd;
-    uint8_t _payloadIndex;
-    uint8_t _checksum;
+    const static uint16_t kTxBuffLen = 256;
+    uint8_t tx_buffer_[kTxBuffLen];
+
+    const static uint16_t kRxBuffLen = 64;
+    uint8_t rx_buffer_[kRxBuffLen];
+    uint8_t payload_size_;
+    uint8_t cmd_;
+    uint8_t payload_index_;
+    uint8_t checksum_;
 
     void handleCommand(uint8_t cmd);
     void sendPacket(uint8_t cmd, const uint8_t* payload, uint8_t size);

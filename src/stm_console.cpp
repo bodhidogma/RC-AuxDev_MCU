@@ -24,6 +24,8 @@ extern DevCRSF crsf;
 // extern DevSBus sbus;
 extern MspHandler msp;
 
+#define USE_CDC_CONSOLE 0   // MSP vs. CONSOLE mode (USB CDC)
+
 // global uart rx buffer
 uint8_t console_uart_rx_buffer_[1];
 
@@ -265,7 +267,7 @@ extern "C" void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
 extern "C" void USBD_CDC_RxCpltCallback(uint8_t* buf, uint32_t len) {
   // do something with USB UART data
   for (uint32_t i = 0; i < len; ++i) {
-#if 0  
+#if USE_CDC_CONSOLE
     console.update_rx_buffer(buf[i]);
 #else
     msp.processByte(buf[i]);
@@ -278,5 +280,7 @@ extern "C" void USBD_CDC_RxCpltCallback(uint8_t* buf, uint32_t len) {
  */
 extern "C" void USBD_CDC_TxCpltCallback(uint8_t* buf, uint32_t len) {
   // do something with USB UART data
+#if USE_CDC_CONSOLE 
   console.update_tx_head();
+#endif
 }

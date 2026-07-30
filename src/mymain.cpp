@@ -26,8 +26,8 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 /** F103 - USB interface needs to be re-inserted to enumerate properly.
  *
  */
-StmConsole console(&huart1, false);  // UART
-// StmConsole console(NULL, true); // USB CDC
+StmConsole console(&huart1, false); // UART
+//StmConsole console(NULL, true);     // USB CDC
 MspHandler msp;  // MSP command handler (USB CDC)
 
 // blink LED on board (green) and external LED (red)
@@ -85,12 +85,14 @@ void main_loop(void) {
   // HAL_Delay(2000);
 
   uint8_t buf[64];
-  uint8_t buffer[] = "<<START>>\r\n";
 
-  // CDC_Transmit_FS(buffer, sizeof(buffer));
-  // HAL_Delay(100);
-  HAL_UART_Transmit_IT(&huart1, buffer, sizeof(buffer));
-  HAL_Delay(100);
+  if (1) {
+    uint8_t buffer[] = "<<START>>\r\n";
+    //CDC_Transmit_FS(buffer, sizeof(buffer));
+    //HAL_Delay(100);
+    HAL_UART_Transmit_IT(&huart1, buffer, sizeof(buffer));
+    HAL_Delay(100);
+  }
 
   DevFlash flash(CONFIG_FLASH_PAGE_ADDR);
 
@@ -207,9 +209,9 @@ void main_loop(void) {
       count_s++;
 
       if (usb_connected) {
-        // console.Send("USB OK\r\n", 8);
-        // console.Send(".", 1);
-        // CDC_Transmit_FS((uint8_t *)".", 1);
+        //console.Send("USB OK\r\n", 8);
+        //console.Send(".", 1);
+        //CDC_Transmit_FS((uint8_t *)".", 1);
       }
 
       if (count_s % 10 == 0) {
@@ -234,6 +236,7 @@ void main_loop(void) {
       }
 
       // print GPIO state(s)
+#if 0
       snprintf((char*)buf, sizeof(buf), "b1= %d u= %d i= %d ",
                button1.IsEnabled() ? 1 : 0, usb_detect.IsEnabled() ? 1 : 0,
                igniter.IsEnabled() ? 1 : 0);
@@ -268,6 +271,7 @@ void main_loop(void) {
 #endif
       // print EOL
       console.Send(NL, 2);
+#endif      
     }
 
     // update PWM output from CRSF input (if available)
